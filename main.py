@@ -15,7 +15,7 @@ def main():
         print("1. Create User")
         print("2. Edit Profile")
         print("3. View Properties")
-        print("4. Get Recommendations")
+        print("4. Give Recommendations")
         print("5. Get LLM Summary")
         print("6. Exit")
         choice = input("Choose an option: ")
