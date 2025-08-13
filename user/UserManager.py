@@ -16,13 +16,17 @@ class UserManager:
         self.current_user_id = None
 
     def create_user(self):
-        user_id = input("Enter user ID: ")
-        name = input("Enter name: ")
-        group_size = int(input("Enter group size: "))
-        environment = input("Preferred environment (mountain/lake/beach/city): ")
-        budget_min = float(input("Enter minimum budget: "))
-        budget_max = float(input("Enter maximum budget: "))
-        travel_dates = input("Enter travel dates (optional): ") or None
+        try:
+            user_id = input("Enter user ID: ")
+            name = input("Enter name: ")
+            group_size = int(input("Enter group size: "))
+            environment = input("Preferred environment (mountain/lake/beach/city): ")
+            budget_min = float(input("Enter minimum budget: "))
+            budget_max = float(input("Enter maximum budget: "))
+            travel_dates = input("Enter travel dates (optional): ") or None
+        except:
+            print("Invalid input. Please try again.")
+            return
 
         user = User(user_id, name, group_size, environment, budget_min, budget_max, travel_dates)
         self.users[user_id] = user
