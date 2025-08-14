@@ -2,13 +2,14 @@ from user.UserManager import UserManager
 from properties.PropertyManager import PropertyManager
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
+from recommender.LLMHelper import LLMHelper
 
 
 def main():
     user_manager = UserManager()
     property_manager = PropertyManager('data/properties.csv')
     recommender = Recommender()
-    llm = LLMHelper()
+    llm = LLMHelper(csv_path="data/properties_expanded.csv")
 
     while True:
         print("\nMenu:")
