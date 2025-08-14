@@ -1,7 +1,6 @@
 from user.UserManager import UserManager
 from properties.PropertyManager import PropertyManager, generate_properties_csv
 from recommender.Recommender import Recommender
-# Keep a single import path for LLMHelper.
 from recommender.llm import LLMHelper
 
 
@@ -24,18 +23,17 @@ def main():
     user_manager = UserManager()
     property_manager = PropertyManager('data/properties.csv')
     recommender = Recommender()
-    # Use expanded CSV if present; otherwise LLMHelper will auto-detect.
     llm = LLMHelper(csv_path="data/properties_expanded.csv")
 
     while True:
         print("\nMenu:")
         print("1. Create User")
         print("2. Edit Profile")
-        print("3. View Profile")           # NEW
+        print("3. View Profile")
         print("4. Show Properties")
         print("5. Get Recommendations")
         print("6. LLM Summary")
-        print("7. Delete Profile")          # NEW
+        print("7. Delete Profile")
         print("8. Exit")
 
         choice = input("Choose an option: ").strip()
@@ -88,7 +86,7 @@ def main():
                 print(llm.generate_travel_blurb(prompt))
             else:
                 print("No user selected.")
-        elif choice == '7':  # Delete Profile
+        elif choice == '7':
             user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
             if not user:
                 print("No user selected.")
