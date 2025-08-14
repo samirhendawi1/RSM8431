@@ -49,12 +49,23 @@ class LLMHelper:
             request_timeout: int = 60,
     ) -> None:
         self.model = model
-        self.timeout = request_timeout
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or self._prompt_api_key()
+        self.timeout = max(1, int(request_timeout)) if isinstance(request_timeout, int) else 60
+
+        # Resolve API key; tolerate environments where input() isn't possible
+        resolved_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        if not resolved_key:
+            try:
+                resolved_key = self._prompt_api_key().strip()
+            except Exception:
+                resolved_key = ""
+
+        self.api_key = resolved_key
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-        }
+        } if self.api_key else None
+
+        # Load properties (as list of dicts)
         self.properties = self._load_properties_csv(csv_path)
 
     # -------------------------------
@@ -65,6 +76,9 @@ class LLMHelper:
         Call the LLM and return a parsed dict.
         On error, returns {'error': '...', 'details'?: ... , 'raw'?: ...}
         """
+        if not isinstance(user_prompt, str):
+            user_prompt = "" if user_prompt is None else str(user_prompt)
+
         payload = {
             "model": self.model,
             "messages": [
@@ -72,9 +86,9 @@ class LLMHelper:
                 {
                     "role": "user",
                     "content": (
-                            "PROPERTIES:\n" + json.dumps(self.properties, ensure_ascii=False) +
-                            "\n\nUSER REQUEST:\n" + user_prompt +
-                            "\n\nRespond with JSON: {\"tags\": [...], \"property_ids\": [...]} (property_ids optional)"
+                        "PROPERTIES:\n" + self._safe_dump_json(self.properties) +
+                        "\n\nUSER REQUEST:\n" + user_prompt +
+                        '\n\nRespond with JSON: {"tags": [...], "property_ids": [...]} (property_ids optional)'
                     ),
                 },
             ],
@@ -87,6 +101,9 @@ class LLMHelper:
         Returns a short descriptive blurb string.
         On failure, returns an error string prefixed with 'ERROR:'.
         """
+        if not isinstance(prompt, str):
+            prompt = "" if prompt is None else str(prompt)
+
         payload = {
             "model": self.model,
             "messages": [
@@ -109,39 +126,75 @@ class LLMHelper:
     # Internal helpers
     # -------------------------------
     def _post_and_parse(self, payload: Dict[str, Any], expect_json: bool = True) -> Any:
+        # Pre-flight checks
+        if not isinstance(payload, dict):
+            return {"error": "Invalid request payload", "details": "payload must be a dict"}
+
+        if not self.api_key or not self.headers:
+            return {"error": "Missing API key", "details": "Set OPENROUTER_API_KEY or pass api_key to LLMHelper."}
+
         try:
             r = requests.post(OPENROUTER_URL, headers=self.headers, json=payload, timeout=self.timeout)
-            if r.status_code != 200:
-                return {"error": f"HTTP {r.status_code}", "details": r.text}
-            data = r.json()
-            msg = (data.get("choices") or [{}])[0].get("message", {}).get("content")
-            if not msg:
-                return {"error": "No content in response", "details": data}
-            if not expect_json:
-                return msg
-
-            # Try strict JSON parse
-            try:
-                return json.loads(msg)
-            except json.JSONDecodeError:
-                # Loose extraction if model included extra text
-                start = msg.find("{")
-                end = msg.rfind("}")
-                if start != -1 and end != -1 and end > start:
-                    try:
-                        return json.loads(msg[start:end + 1])
-                    except json.JSONDecodeError:
-                        return {"error": "Model returned non-JSON content", "raw": msg}
-                return {"error": "Model returned non-JSON content", "raw": msg}
         except Exception as e:
             return {"error": "Request failed", "details": str(e)}
+
+        if not getattr(r, "status_code", None):
+            return {"error": "No HTTP response", "details": "requests returned no status code"}
+
+        if r.status_code != 200:
+            # Try to capture JSON body if present; else raw text
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text[:1000] if hasattr(r, "text") else ""
+            return {"error": f"HTTP {r.status_code}", "details": body}
+
+        # Parse OpenRouter JSON
+        try:
+            data = r.json()
+        except Exception as e:
+            return {"error": "Invalid JSON from API", "details": str(e)}
+
+        # Extract model message content
+        try:
+            choices = data.get("choices") or []
+            if not choices:
+                return {"error": "Empty response", "details": data}
+            msg = choices[0].get("message", {}).get("content")
+        except Exception:
+            msg = None
+
+        if not msg:
+            return {"error": "No content in response", "details": data}
+
+        if not expect_json:
+            # Return raw assistant text for blurb generation
+            return msg
+
+        # Try strict JSON parse first
+        try:
+            return json.loads(msg)
+        except json.JSONDecodeError:
+            # Loose extraction if model included extra text
+            start = msg.find("{")
+            end = msg.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(msg[start:end + 1])
+                except json.JSONDecodeError:
+                    return {"error": "Model returned non-JSON content", "raw": msg[:1000]}
+            return {"error": "Model returned non-JSON content", "raw": msg[:1000]}
+        except Exception as e:
+            return {"error": "JSON parse error", "details": str(e)}
 
     def _prompt_api_key(self) -> str:
         try:
             return getpass.getpass("Enter your OpenRouter API key: ").strip()
         except Exception:
-            # Fallback (e.g., on some IDEs that cannot hide input)
-            return input("Enter your OpenRouter API key: ").strip()
+            try:
+                return input("Enter your OpenRouter API key: ").strip()
+            except Exception:
+                return ""
 
     def _load_properties_csv(self, csv_path: Optional[str]) -> List[Dict[str, Any]]:
         # Resolve path with a few sensible fallbacks
@@ -155,33 +208,80 @@ class LLMHelper:
 
         csv_file = None
         for p in candidate_paths:
-            if os.path.isfile(p):
-                csv_file = p
-                break
+            try:
+                if os.path.isfile(p):
+                    csv_file = p
+                    break
+            except Exception:
+                continue
 
         if csv_file is None:
-            raise FileNotFoundError(
-                "Could not find a properties CSV. "
-                "Tried: " + ", ".join(candidate_paths)
-            )
+            # Return empty set instead of raising; caller can still use search (will just analyze tags)
+            return []
 
-        df = pd.read_csv(csv_file)
+        # Read CSV defensively
+        try:
+            df = pd.read_csv(csv_file)
+        except Exception as e:
+            # On read failure, return empty property list rather than crash
+            return []
 
         # Normalize column names
-        df.columns = [c.strip().lower() for c in df.columns]
+        try:
+            df.columns = [str(c).strip().lower() for c in df.columns]
+        except Exception:
+            df = pd.DataFrame(df)
+            df.columns = [str(c).strip().lower() for c in df.columns]
 
         # Ensure there's a stable integer `property_id`
         if "property_id" not in df.columns:
-            df = df.reset_index().rename(columns={"index": "property_id"})
-            df["property_id"] = df["property_id"].astype(int)
+            try:
+                df = df.reset_index().rename(columns={"index": "property_id"})
+                df["property_id"] = pd.to_numeric(df["property_id"], errors="coerce").fillna(0).astype(int)
+            except Exception:
+                # Worst case: synthesize an id column
+                df = df.copy()
+                df["property_id"] = range(len(df))
 
         # Basic type cleanup
         if "nightly_price" in df.columns:
-            df["nightly_price"] = pd.to_numeric(df["nightly_price"], errors="coerce")
+            try:
+                df["nightly_price"] = pd.to_numeric(df["nightly_price"], errors="coerce")
+            except Exception:
+                pass
 
         # Convert NaN to empty strings for JSON friendliness
-        records = df.fillna("").to_dict(orient="records")
+        try:
+            records = df.fillna("").to_dict(orient="records")
+        except Exception:
+            # As a last resort, coerce row by row
+            records = []
+            try:
+                for _, row in df.iterrows():
+                    try:
+                        rec = {str(k): ("" if (v is None) else (str(v) if not isinstance(v, (int, float, bool, dict, list)) else v))
+                               for k, v in row.items()}
+                        # Keep numerics as-is when possible
+                        if "property_id" in row:
+                            rec["property_id"] = int(row["property_id"]) if pd.notna(row["property_id"]) else 0
+                        records.append(rec)
+                    except Exception:
+                        continue
+            except Exception:
+                records = []
+
         return records
+
+    def _safe_dump_json(self, obj: Any) -> str:
+        """Dump JSON safely for prompt construction (never raises)."""
+        try:
+            return json.dumps(obj, ensure_ascii=False)
+        except Exception:
+            try:
+                # Best-effort: convert to str if object isn't JSON-serializable
+                return json.dumps(str(obj), ensure_ascii=False)
+            except Exception:
+                return "[]"
 
 
 # Optional: allow running this module directly for a quick test loop
@@ -189,17 +289,22 @@ if __name__ == "__main__":
     helper = LLMHelper()  # will auto-detect CSV and prompt for API key if needed
     print("Vacation Property Bot (type 'exit' to quit)")
     while True:
-        prompt = input("You: ").strip()
+        try:
+            prompt = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBot: Have a great vacation!")
+            break
+
         if prompt.lower() == "exit":
             print("Bot: Have a great vacation!")
             break
+
         result = helper.search(prompt)
         if isinstance(result, dict) and "error" in result:
-            print("Bot (error):", result["error"])
-            if "details" in result:
-                print("Details:", result["details"][:240])
-            elif "raw" in result:
-                print("Raw output:", result["raw"][:240])
+            print("Bot (error):", result.get("error"))
+            details = result.get("details") or result.get("raw")
+            if details:
+                print("Details:", (details if isinstance(details, str) else str(details))[:240])
         else:
             tags = result.get("tags", []) if isinstance(result, dict) else []
             prop_ids = result.get("property_ids", []) if isinstance(result, dict) else []
