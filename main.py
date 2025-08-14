@@ -263,7 +263,11 @@ def main():
 
             # Recommend + export
             try:
-                top5 = recommender.recommend(user, candidates)
+                print("1.Environment")
+                print("2.Price")
+                print("3.They are equally important")
+                choices = input("which is the more important factor: ").strip()
+                top5 = recommender.recommend(user, candidates, choices)
                 export_dir = Path("output")
                 export_dir.mkdir(parents=True, exist_ok=True)
 
