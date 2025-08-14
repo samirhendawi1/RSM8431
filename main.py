@@ -206,103 +206,97 @@ def main():
             else:
                 print("Property display is not available.")
         elif choice == '5':
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
-            if user is None:
-                print("No user selected.")
-                continue
-                # Validate budgets before recommending
+        user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
+        if user is None:
+            print("No user selected.")
+            continue
+    
+        # Validate budgets before recommending
         try:
-            if float(getattr(user, "budget_min", 0)) <= 0 or float(getattr(user, "budget_max", 0)) <= 0:
+            bmin = float(getattr(user, "budget_min", 0))
+            bmax = float(getattr(user, "budget_max", 0))
+            if bmin <= 0 or bmax <= 0:
                 print("Invalid budget(s). Please edit your profile to set positive budgets.")
                 continue
-            if float(user.budget_min) > float(user.budget_max):
+            if bmin > bmax:
                 print("Invalid budget range (min > max). Please edit your profile.")
                 continue
         except Exception:
             print("Budget values look invalid. Please edit your profile.")
             continue
-
-            freeform = input("Add any tags, features, or describe the property (optional): ").strip()
-
-            llm_tags, llm_ids = [], []
-            candidates = property_manager.properties
-
-            if freeform:
-                candidates = ss.find_candidates(freeform, top_k=300)
-
-                if os.getenv("OPENROUTER_API_KEY"):
-                    try:
-                        resp = llm.search(freeform)
-                        if isinstance(resp, dict) and "error" not in resp:
-                            llm_tags = resp.get("tags", []) or []
-                            llm_ids  = resp.get("property_ids", []) or []
-                    except Exception:
-                        pass
-
-                # Canonicalize and boost
-                llm_tags = ss.canonicalize_tags(llm_tags)
-                textcol = "__fulltext__" if "__fulltext__" in candidates.columns else None
-                if llm_tags and textcol:
-                    # FIX: make null/typing safe for text content
-                    has_tag = candidates[textcol].fillna("").astype(str).apply(
-                        lambda t: any(tag in t for tag in llm_tags)
-                    )
-                    candidates = candidates.copy()
-                    candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + has_tag.astype(float) * 0.15
-
-                if llm_ids and "property_id" in candidates.columns:
-                    candidates = candidates.copy()
-                    candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + \
-                                                   candidates["property_id"].isin(llm_ids).astype(float) * 0.20
-
-            try:
-                recs = recommender.recommend(user, candidates)
-
-                top5 = recs.head(5)
-
-                # FIX: robust script_dir even if __file__ is missing
+    
+        # Optional freeform query + LLM assist
+        freeform = input("Add any tags, features, or describe the property (optional): ").strip()
+        ss = SmartSearch(property_manager.properties)
+        candidates = property_manager.properties
+        llm_tags, llm_ids = [], []
+    
+        if freeform:
+            candidates = ss.find_candidates(freeform, top_k=300)
+            if os.getenv("OPENROUTER_API_KEY"):
                 try:
-                    script_dir = Path(__file__).resolve().parent
-                except NameError:
-                    script_dir = Path.cwd()
-
-                export_dir = script_dir / "exports"
-                export_dir.mkdir(parents=True, exist_ok=True)
-
-                # FIX: safe filename for user suffix
-                def _safe_filename(s):
-                    s = s or ""
-                    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
-
-                user_suffix = _safe_filename(getattr(user, "name", None))
-                fname = f"recommendations_{user_suffix}.csv" if user_suffix else "recommendations.csv"
-                output_path = export_dir / fname
-
-                preferred_cols = [c for c in ["location", "type", "nightly_price", "features", "fit_score"] if c in top5.columns]
-                df_to_save = top5[preferred_cols] if preferred_cols else top5
-                try:
-                    import pandas as _pd
-                    if not isinstance(df_to_save, _pd.DataFrame):
-                        df_to_save = _pd.DataFrame(df_to_save)
+                    resp = llm.search(freeform)
+                    if isinstance(resp, dict) and "error" not in resp:
+                        llm_tags = resp.get("tags", []) or []
+                        llm_ids  = resp.get("property_ids", []) or []
                 except Exception:
                     pass
-
-                df_to_save.to_csv(output_path, index=False, encoding="utf-8")
-                print(f"\nTop 5 recommendations saved to: {output_path}")
-
-            except Exception as e:
-                print("Error generating recommendations:", e)
-        elif choice == '6':
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
-            if user:
-                prompt = (
-                    f"Write a fun intro for a user looking for a {user.environment} stay "
-                    f"with {user.group_size} friends under ${user.budget_max}/night."
-                )
-                print("\nLLM Response:")
-                print(llm.generate_travel_blurb(prompt))
-            else:
-                print("No user selected.")
+    
+        # Boost candidates if LLM gave tags/IDs
+        llm_tags = ss.canonicalize_tags(llm_tags)
+        textcol = "__fulltext__" if "__fulltext__" in candidates.columns else None
+        if llm_tags and textcol:
+            has_tag = candidates[textcol].fillna("").astype(str).apply(
+                lambda t: any(tag in t for tag in llm_tags)
+            )
+            candidates = candidates.copy()
+            candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + has_tag.astype(float) * 0.15
+    
+        if llm_ids and "property_id" in candidates.columns:
+            candidates = candidates.copy()
+            candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + \
+                                           candidates["property_id"].isin(llm_ids).astype(float) * 0.20
+    
+        # Recommend + export
+        try:
+            top5 = recommender.recommend(user, candidates)
+            export_dir = Path("output")
+            export_dir.mkdir(parents=True, exist_ok=True)
+    
+            def _safe_filename(s):
+                s = s or ""
+                return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
+    
+            user_suffix = _safe_filename(getattr(user, "name", None))
+            fname = f"recommendations_{user_suffix}.csv" if user_suffix else "recommendations.csv"
+            output_path = export_dir / fname
+    
+            preferred_cols = [c for c in ["location", "type", "nightly_price", "features", "fit_score"] if c in top5.columns]
+            df_to_save = top5[preferred_cols] if preferred_cols else top5
+    
+            try:
+                import pandas as _pd
+                if not isinstance(df_to_save, _pd.DataFrame):
+                    df_to_save = _pd.DataFrame(df_to_save)
+            except Exception:
+                pass
+    
+            df_to_save.to_csv(output_path, index=False, encoding="utf-8")
+            print(f"\nTop 5 recommendations saved to: {output_path}")
+        except Exception as e:
+            print("Error generating recommendations:", e)
+    
+            elif choice == '6':
+                user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
+                if user:
+                    prompt = (
+                        f"Write a fun intro for a user looking for a {user.environment} stay "
+                        f"with {user.group_size} friends under ${user.budget_max}/night."
+                    )
+                    print("\nLLM Response:")
+                    print(llm.generate_travel_blurb(prompt))
+                else:
+                    print("No user selected.")
         elif choice == '7':
             user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
             if not user:
