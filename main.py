@@ -7,6 +7,90 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+# ---- additions for error handling ----
+import builtins
+import sys
+
+def say_error(msg, err=None):
+    try:
+        if err:
+            print(f"[error] {msg}: {err}")
+        else:
+            print(f"[error] {msg}")
+    except Exception:
+        print("[error] unexpected printing failure")
+
+_original_input = builtins.input
+def ask_input_safely(prompt: str):
+    try:
+        if prompt == "Choose an option: ":
+            valid = {"1","2","3","4","5","6","7","8"}
+            while True:
+                try:
+                    ans = _original_input(prompt)
+                except (EOFError, KeyboardInterrupt):
+                    print("[info] exiting")
+                    return "8"
+                if ans is None:
+                    continue
+                ans = str(ans).strip()
+                if ans in valid:
+                    return ans
+                print("Please enter a number from 1 to 8.")
+        elif prompt.startswith("Type DELETE to remove profile"):
+            while True:
+                try:
+                    ans = _original_input(prompt)
+                except (EOFError, KeyboardInterrupt):
+                    print("[info] delete cancelled")
+                    return "cancel"
+                if ans is None:
+                    continue
+                s = str(ans).strip()
+                if s == "DELETE" or s.lower() == "cancel":
+                    return s
+                print("Please type exactly DELETE, or 'cancel' to stop.")
+        else:
+            return _original_input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        print("[info] input cancelled")
+        return ""
+builtins.input = ask_input_safely
+
+_original_generate_properties_csv = generate_properties_csv
+def generate_properties_csv(path: str, n: int):
+    try:
+        return _original_generate_properties_csv(path, n)
+    except Exception as e:
+        say_error("could not generate demo properties; continuing", e)
+globals()["generate_properties_csv"] = generate_properties_csv
+
+try:
+    _orig_llm_blurb = LLMHelper.generate_travel_blurb
+    def generate_travel_blurb(self, prompt: str):
+        try:
+            return _orig_llm_blurb(self, prompt)
+        except Exception as e:
+            say_error("llm blurb failed", e)
+            return "Sorry, I couldn't generate a blurb right now."
+    LLMHelper.generate_travel_blurb = generate_travel_blurb
+
+    if hasattr(LLMHelper, "search"):
+        _orig_llm_search = LLMHelper.search
+        def search(self, query: str):
+            try:
+                return _orig_llm_search(self, query)
+            except Exception as e:
+                say_error("llm search failed", e)
+                return {"tags": [], "property_ids": []}
+        LLMHelper.search = search
+except Exception as e:
+    say_error("llm wrappers setup failed", e)
+
+def student_excepthook(exc_type, exc, tb):
+    print(f"[error] unexpected issue: {exc_type.__name__}: {exc}")
+sys.excepthook = student_excepthook
+
 # ---------- Helpers ----------
 def _derive_available_envs(df):
     """Infer available 'environments' from tags/type/environment columns."""
@@ -148,7 +232,10 @@ def main():
                 llm_tags = ss.canonicalize_tags(llm_tags)
                 textcol = "__fulltext__" if "__fulltext__" in candidates.columns else None
                 if llm_tags and textcol:
-                    has_tag = candidates[textcol].apply(lambda t: any(tag in t for tag in llm_tags))
+                    # FIX: make null/typing safe for text content
+                    has_tag = candidates[textcol].fillna("").astype(str).apply(
+                        lambda t: any(tag in t for tag in llm_tags)
+                    )
                     candidates = candidates.copy()
                     candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + has_tag.astype(float) * 0.15
 
@@ -161,12 +248,23 @@ def main():
                 recs = recommender.recommend(user, candidates)
 
                 top5 = recs.head(5)
-                script_dir = Path(__file__).resolve().parent
+
+                # FIX: robust script_dir even if __file__ is missing
+                try:
+                    script_dir = Path(__file__).resolve().parent
+                except NameError:
+                    script_dir = Path.cwd()
+
                 export_dir = script_dir / "exports"
                 export_dir.mkdir(parents=True, exist_ok=True)
 
-                user_suffix = getattr(user, "name", None)
-                fname = f"recommendations{('_' + user_suffix) if user_suffix else ''}.csv"
+                # FIX: safe filename for user suffix
+                def _safe_filename(s):
+                    s = s or ""
+                    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
+
+                user_suffix = _safe_filename(getattr(user, "name", None))
+                fname = f"recommendations_{user_suffix}.csv" if user_suffix else "recommendations.csv"
                 output_path = export_dir / fname
 
                 preferred_cols = [c for c in ["location", "type", "nightly_price", "features", "fit_score"] if c in top5.columns]
@@ -205,15 +303,17 @@ def main():
                 continue
             try:
                 uid = getattr(user, 'user_id', None)
-                if hasattr(user_manager, 'users') and isinstance(user_manager, 'users'):
-                    pass  # defensive
-                if hasattr(user_manager, 'users') and isinstance(user_manager.users, dict):
-                    if uid in user_manager.users:
-                        del user_manager.users[uid]
+
+                # FIX: remove invalid isinstance(user_manager, 'users'); operate on dict safely
+                users_dict = getattr(user_manager, 'users', None)
+                if isinstance(users_dict, dict):
+                    if uid in users_dict:
+                        del users_dict[uid]
                     else:
-                        for k, v in list(user_manager.users.items()):
+                        for k, v in list(users_dict.items()):
                             if v is user:
-                                del user_manager.users[k]
+                                del users_dict[k]
+
                 if getattr(user_manager, 'current_user_id', None) == uid:
                     user_manager.current_user_id = None
                 print("Profile deleted.")
