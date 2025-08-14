@@ -1,19 +1,3 @@
-# LLMhelper.py
-"""
-LLMHelper: OpenRouter LLM integration that reads properties from a **CSV**,
-injects them into the prompt as JSON, and returns structured tags / property IDs.
-
-Usage in your project:
-    from LLMhelper import LLMHelper
-    llm = LLMHelper(csv_path="data/properties.csv")  # or leave None to auto-detect
-    result = llm.search('Looking for a beach house for 4 under $250/night')
-    print(result)  # {"tags": [...], "property_ids": [...]}
-
-This class is drop-in safe and does **not** modify other parts of your code.
-It includes a compatibility shim (see recommender/llm.py) so that
-`from recommender.llm import LLMHelper` continues to work.
-"""
-
 from __future__ import annotations
 import os
 import json
