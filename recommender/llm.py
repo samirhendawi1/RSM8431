@@ -1,2 +1,2 @@
-from recommender.LLMHelper import LLMHelper  # re-export
+from recommender.LLMHelper import LLMHelper
 __all__ = ["LLMHelper"]

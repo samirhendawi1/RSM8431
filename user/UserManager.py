@@ -1,4 +1,4 @@
-class User:  # move this to the top of the file if not already there
+class User:
     def __init__(self, user_id, name, group_size, environment, budget_min,
                  budget_max, travel_dates=None):
         self.user_id = user_id
