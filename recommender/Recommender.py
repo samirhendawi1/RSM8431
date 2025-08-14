@@ -25,11 +25,23 @@ class Recommender:
 
         # Budget score (safe even if missing/invalid numbers)
         try:
-            budget_min = float(getattr(user, "budget_min", 0) or 0)
-            budget_max = float(getattr(user, "budget_max", 0) or 0)
-            avg_budget = (budget_min + budget_max) / 2.0
-            price_range = (budget_max - budget_min) + 1e-5
-            df["budget_score"] = 1 - abs((pd.to_numeric(df["nightly_price"], errors="coerce").fillna(avg_budget) - avg_budget) / price_range)
+            import pandas as pd
+            # nightly_price → numeric
+            df["nightly_price"] = pd.to_numeric(df["nightly_price"], errors="coerce")
+
+            bmin = float(getattr(user, "budget_min", 0))
+            bmax = float(getattr(user, "budget_max", 0))
+            avg_budget = (bmin + bmax) / 2.0
+
+            if bmin <= 0 or bmax <= 0 or bmax < bmin:
+                # invalid budgets → flat zero
+                df["budget_score"] = 0.0
+            else:
+                price_range = max(abs(bmax - bmin), 1.0)  # avoid division by zero
+                df["budget_score"] = 1 - (
+                    df["nightly_price"].fillna(avg_budget).sub(avg_budget).abs() / price_range
+                )
+                df["budget_score"] = df["budget_score"].clip(lower=0.0, upper=1.0)
         except Exception:
             df["budget_score"] = 0.0
 
