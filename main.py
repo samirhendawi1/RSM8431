@@ -1,10 +1,14 @@
 from user.UserManager import UserManager
-from properties.PropertyManager import PropertyManager
+from properties.PropertyManager import PropertyManager, generate_properties_csv
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
 
 
 def main():
+    
+    # generate property list
+    generate_properties_csv("data/properties.csv", 100)
+
     user_manager = UserManager()
     property_manager = PropertyManager('data/properties.csv')
     recommender = Recommender()
