@@ -210,6 +210,17 @@ def main():
             if user is None:
                 print("No user selected.")
                 continue
+                # Validate budgets before recommending
+        try:
+            if float(getattr(user, "budget_min", 0)) <= 0 or float(getattr(user, "budget_max", 0)) <= 0:
+                print("Invalid budget(s). Please edit your profile to set positive budgets.")
+                continue
+            if float(user.budget_min) > float(user.budget_max):
+                print("Invalid budget range (min > max). Please edit your profile.")
+                continue
+        except Exception:
+            print("Budget values look invalid. Please edit your profile.")
+            continue
 
             freeform = input("Add any tags, features, or describe the property (optional): ").strip()
 
