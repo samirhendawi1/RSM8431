@@ -6,11 +6,11 @@ from smart_search import SmartSearch
 import os
 from pathlib import Path
 from datetime import datetime
+import pandas as pd
 
 # ---- additions for error handling ----
 import builtins
 import sys
-
 
 def say_error(msg, err=None):
     try:
@@ -25,7 +25,7 @@ _original_input = builtins.input
 def ask_input_safely(prompt: str):
     try:
         if prompt == "Choose an option: ":
-            valid = {"1","2","3","4","5","6","7","8"}
+            valid = {"1","2","3","4","5","6","7","8","9"}
             while True:
                 try:
                     ans = _original_input(prompt)
@@ -37,7 +37,7 @@ def ask_input_safely(prompt: str):
                 ans = str(ans).strip()
                 if ans in valid:
                     return ans
-                print("Please enter a number from 1 to 8.")
+                print("Please enter a number from 1 to 9.")
         elif prompt.startswith("Type DELETE to remove profile"):
             while True:
                 try:
@@ -133,14 +133,110 @@ def _normalize_environment(raw_env, ss: SmartSearch, available_envs):
     return raw_env
 
 def _print_profile(user):
-    print("\n--- Current User Profile ---")
-    print(f"ID:            {getattr(user, 'user_id', 'N/A')}")
-    print(f"Name:          {getattr(user, 'name', 'N/A')}")
-    print(f"Group size:    {getattr(user, 'group_size', 'N/A')}")
-    print(f"Environment:   {getattr(user, 'environment', 'N/A')}")
-    print(f"Budget min:    {getattr(user, 'budget_min', 'N/A')}")
-    print(f"Budget max:    {getattr(user, 'budget_max', 'N/A')}")
-    print("-----------------------------\n")
+    def _filter_listings(df):
+        """
+        Interactive filter: all prompts are optional. Case-insensitive substring matching.
+        Filters supported:
+          - min price
+          - max price
+          - location contains
+          - type contains
+          - features contains (comma-separated tokens, all must be present)
+          - tags contains (comma-separated tokens, all must be present)
+        Returns the filtered DataFrame (could be empty).
+        """
+        try:
+            import pandas as pd
+            d = df.copy()
+            # Normalize
+            d.columns = [str(c).lower() for c in d.columns]
+            for col in ["location","type","features","tags"]:
+                if col in d.columns:
+                    d[col] = d[col].fillna("").astype(str)
+
+            # Min / max price
+            try:
+                s = input("Min price (press Enter to skip): ").strip()
+                if s:
+                    mn = float(s)
+                    if "nightly_price" in d.columns:
+                        d = d[pd.to_numeric(d["nightly_price"], errors="coerce") >= mn]
+            except Exception:
+                pass
+            try:
+                s = input("Max price (press Enter to skip): ").strip()
+                if s:
+                    mx = float(s)
+                    if "nightly_price" in d.columns:
+                        d = d[pd.to_numeric(d["nightly_price"], errors="coerce") <= mx]
+            except Exception:
+                pass
+
+            # Location / type contains
+            locq = input("Location contains (skip to ignore): ").strip().lower()
+            if locq and "location" in d.columns:
+                d = d[d["location"].str.lower().str.contains(locq, na=False)]
+
+            typq = input("Type contains (skip to ignore): ").strip().lower()
+            if typq and "type" in d.columns:
+                d = d[d["type"].str.lower().str.contains(typq, na=False)]
+
+            # Features / tags (AND over tokens)
+            def tokenize_csv(s):
+                return [t.strip().lower() for t in s.split(",") if t.strip()]
+
+            fq = input("Features include (comma-separated, all must match; skip to ignore): ").strip()
+            if fq and "features" in d.columns:
+                toks = tokenize_csv(fq)
+                for t in toks:
+                    d = d[d["features"].str.lower().str.contains(t, na=False)]
+
+            tg = input("Tags include (comma-separated, all must match; skip to ignore): ").strip()
+            if tg and "tags" in d.columns:
+                toks = tokenize_csv(tg)
+                for t in toks:
+                    d = d[d["tags"].str.lower().str.contains(t, na=False)]
+
+            # Pretty print
+            try:
+                show_cols = [c for c in ["location","type","nightly_price","features","tags"] if c in d.columns]
+                if not show_cols:
+                    show_cols = list(d.columns)
+                print("\nFiltered results\n-----------------")
+                if len(d) == 0:
+                    print("(no rows matched)")
+                else:
+                    print(d[show_cols].head(50).to_string(index=False))
+                    if len(d) > 50:
+                        print(f"... ({len(d)-50} more rows not shown)")
+            except Exception:
+                print("(could not pretty-print results)")
+
+            # Offer export
+            try:
+                ans = input("Export results to CSV? (y/N): ").strip().lower()
+                if ans == "y":
+                    from pathlib import Path
+                    out = Path("output/filtered_listings.csv")
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    d.to_csv(out, index=False, encoding="utf-8")
+                    print(f"Saved: {out}")
+            except Exception:
+                pass
+
+            return d
+        except Exception as e:
+            print("[error] filter failed:", e)
+            return df
+
+        print("\n--- Current User Profile ---")
+        print(f"ID:            {getattr(user, 'user_id', 'N/A')}")
+        print(f"Name:          {getattr(user, 'name', 'N/A')}")
+        print(f"Group size:    {getattr(user, 'group_size', 'N/A')}")
+        print(f"Environment:   {getattr(user, 'environment', 'N/A')}")
+        print(f"Budget min:    {getattr(user, 'budget_min', 'N/A')}")
+        print(f"Budget max:    {getattr(user, 'budget_max', 'N/A')}")
+        print("-----------------------------\n")
 
 # ---------- Main ----------
 def main():
@@ -167,6 +263,7 @@ def main():
         print("6. Generate a blurb via a LLM")
         print("7. Delete Profile")
         print("8. Exit")
+        print("9. Filter/Search listings")
 
         choice = input("Choose an option: ").strip()
 
@@ -295,6 +392,13 @@ def main():
             except Exception as e:
                 print("Error generating recommendations:", e)
 
+
+        elif choice == '9':
+            try:
+                _filter_listings(property_manager.properties)
+            except Exception as e:
+                say_error("filter/search failed", e)
+
         elif choice == '6':
             # FIX: This elif was wrongly nested inside the except block above
             user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
@@ -330,6 +434,64 @@ def main():
         input("Press Enter to return to menu...")
 
 
+def _filter_listings(df: pd.DataFrame):
+    try:
+        print("\n--- Filter/Search Listings ---")
+        if df.empty:
+            print("No listings available to search.")
+            return
+
+        # Collect filters
+        min_price = input("Minimum price (or Enter to skip): ").strip()
+        max_price = input("Maximum price (or Enter to skip): ").strip()
+        location = input("Location contains (or Enter to skip): ").strip().lower()
+        ptype = input("Type contains (or Enter to skip): ").strip().lower()
+        features = input("Features include (comma-separated, or Enter to skip): ").strip().lower()
+        tags = input("Tags include (comma-separated, or Enter to skip): ").strip().lower()
+
+        results = df.copy()
+
+        # Price filters
+        if min_price:
+            results = results[results["nightly_price"] >= float(min_price)]
+        if max_price:
+            results = results[results["nightly_price"] <= float(max_price)]
+
+        # String filters
+        if location:
+            results = results[results["location"].str.lower().str.contains(location)]
+        if ptype:
+            results = results[results["type"].str.lower().str.contains(ptype)]
+
+        # Features filter (AND match)
+        if features:
+            feats = [f.strip() for f in features.split(",") if f.strip()]
+            for f in feats:
+                results = results[results["features"].str.lower().str.contains(f)]
+
+        # Tags filter (AND match)
+        if tags:
+            taglist = [t.strip() for t in tags.split(",") if t.strip()]
+            for t in taglist:
+                results = results[results["tags"].str.lower().str.contains(t)]
+
+        # Show results
+        if results.empty:
+            print("\nNo listings matched your filters.")
+        else:
+            print("\nFiltered Listings (showing up to 50):")
+            print(results.head(50).to_string(index=False))
+
+            # Optionally export
+            save = input("\nSave results to CSV? (y/n): ").strip().lower()
+            if save == "y":
+                outpath = "output/filtered_listings.csv"
+                results.to_csv(outpath, index=False)
+                print(f"Filtered listings saved to {outpath}")
+
+    except Exception as e:
+        print(f"[error] filter/search failed: {e}")
+
+
 if __name__ == '__main__':
     main()
-
