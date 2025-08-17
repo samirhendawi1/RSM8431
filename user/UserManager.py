@@ -1,8 +1,8 @@
 import os
 import csv
+
 class User:
-    def __init__(self, user_id, name, group_size, environment, budget_min,
-                 budget_max):
+    def __init__(self, user_id, name, group_size, environment, budget_min, budget_max):
         self.user_id = user_id
         self.name = name
         self.group_size = group_size
@@ -18,7 +18,16 @@ class UserManager:
         self.csv_file = csv_file
         self.load_from_csv()  # Load automatically once started
 
+    # ---------- Persistence ----------
     def save_to_csv(self):
+        # Ensure parent folder exists
+        try:
+            parent = os.path.dirname(self.csv_file)
+            if parent and parent not in ("", "."):
+                os.makedirs(parent, exist_ok=True)
+        except Exception:
+            pass
+
         with open(self.csv_file, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["user_id", "name", "group_size", "environment", "budget_min", "budget_max"])
@@ -26,39 +35,53 @@ class UserManager:
                 writer.writerow([user.user_id, user.name, user.group_size, user.environment,
                                  user.budget_min, user.budget_max])
 
-
     def load_from_csv(self):
         try:
             with open(self.csv_file, mode="r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    # Be tolerant to extra columns (like old 'travel_dates')
                     user = User(
-                        row["user_id"],
-                        row["name"],
-                        int(row["group_size"]),
-                        row["environment"],
-                        float(row["budget_min"]),
-                        float(row["budget_max"])
+                        row.get("user_id", ""),
+                        row.get("name", ""),
+                        int(float(row.get("group_size", 0) or 0)),
+                        row.get("environment", ""),
+                        float(row.get("budget_min", 0) or 0),
+                        float(row.get("budget_max", 0) or 0),
                     )
                     self.users[user.user_id] = user
         except FileNotFoundError:
+            # No file yet; that's fine
             pass
+        except Exception:
+            # If the file is malformed, start clean
+            self.users = {}
 
+    # ---------- ID assignment ----------
+    def _generate_user_id(self) -> str:
+        """Return the smallest positive integer (as a string) not yet used as a user_id."""
+        existing = set(self.users.keys())
+        i = 1
+        while str(i) in existing:
+            i += 1
+        return str(i)
 
+    # ---------- Operations ----------
     def create_user(self):
         try:
-            user_id = input("Enter user ID: ")
+            user_id = self._generate_user_id()
+            print(f"(Assigned user id: {user_id})")
             name = input("Enter name: ")
             group_size = int(input("Enter group size: "))
             environment = input("Preferred environment (mountain/lake/beach/city): ")
             budget_min = float(input("Enter minimum budget: "))
             budget_max = float(input("Enter maximum budget: "))
-        except:
+        except Exception:
             print("Invalid input. Please try again.")
             return
 
         user = User(user_id, name, group_size, environment, budget_min, budget_max)
-        self.users[user_id] = user
+        self.users[user.user_id] = user
         self.current_user_id = user_id
         print("User created successfully.")
         self.save_to_csv()  # Automatically save to csv_file
@@ -71,13 +94,18 @@ class UserManager:
         user = self.users[self.current_user_id]
         print("Editing profile for:", user.name)
         user.name = input(f"Name ({user.name}): ") or user.name
-        user.group_size = int(input(f"Group size ({user.group_size}): ") or user.group_size)
+        try:
+            user.group_size = int(input(f"Group size ({user.group_size}): ") or user.group_size)
+        except Exception:
+            pass
         user.environment = input(f"Environment ({user.environment}): ") or user.environment
-        user.budget_min = float(input(f"Minimum budget ({user.budget_min}): ") or user.budget_min)
-        user.budget_max = float(input(f"Maximum budget ({user.budget_max}): ") or user.budget_max)
+        try:
+            user.budget_min = float(input(f"Minimum budget ({user.budget_min}): ") or user.budget_min)
+            user.budget_max = float(input(f"Maximum budget ({user.budget_max}): ") or user.budget_max)
+        except Exception:
+            pass
         print("Profile updated.")
         self.save_to_csv()  # Automatically save to csv_file
-
 
     def get_current_user(self):
         return self.users.get(self.current_user_id)
