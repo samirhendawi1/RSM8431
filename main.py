@@ -139,12 +139,11 @@ def _print_profile(user):
     print(f"Environment:   {getattr(user, 'environment', 'N/A')}")
     print(f"Budget min:    {getattr(user, 'budget_min', 'N/A')}")
     print(f"Budget max:    {getattr(user, 'budget_max', 'N/A')}")
-    print(f"Travel dates:  {getattr(user, 'travel_dates', 'N/A')}")
     print("-----------------------------\n")
 
 # ---------- Main ----------
 def main():
-    
+
     # Generate demo data (keep as per your flow)
     generate_properties_csv("data/properties.csv", 100)
 
@@ -328,7 +327,8 @@ def main():
             print("Invalid option.")
 
         input("Press Enter to return to menu...")
-    
+
 
 if __name__ == '__main__':
     main()
+
