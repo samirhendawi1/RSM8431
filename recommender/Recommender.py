@@ -2,7 +2,19 @@ import pandas as pd
 import numpy as np
 from typing import Optional, List, Tuple, Union
 
+
 class Recommender:
+
+    def __init__(self, top_k: int = 5, echo_table: bool = True):
+        self.top_k = top_k
+        self.echo_table = echo_table
+
+    def _as_lower_str(self, s: Optional[str]) -> str:
+        if s is None or (isinstance(s, float) and np.isnan(s)):
+            return ""
+        return str(s).lower()
+
+    # NOTE: flexible signature to avoid "takes 3 positional args but 4 were given"
     def recommend(
             self,
             user,
