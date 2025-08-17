@@ -144,6 +144,7 @@ def _print_profile(user):
 
 # ---------- Main ----------
 def main():
+    
     # Generate demo data (keep as per your flow)
     generate_properties_csv("data/properties.csv", 100)
 
@@ -308,38 +309,26 @@ def main():
                 print("No user selected.")
 
         elif choice == '7':
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
+            user = user_manager.get_current_user()
             if not user:
                 print("No user selected.")
                 continue
-            confirm = input(f"Type DELETE to remove profile '{getattr(user, 'name', '')}': ").strip()
+            confirm = input(f"Type DELETE to remove profile '{user.name}': ").strip()
             if confirm != "DELETE":
                 print("Cancelled.")
                 continue
-            try:
-                uid = getattr(user, 'user_id', None)
 
-                # FIX: remove invalid isinstance(user_manager, 'users'); operate on dict safely
-                users_dict = getattr(user_manager, 'users', None)
-                if isinstance(users_dict, dict):
-                    if uid in users_dict:
-                        del users_dict[uid]
-                    else:
-                        for k, v in list(users_dict.items()):
-                            if v is user:
-                                del users_dict[k]
+            user_manager.delete_user(user.user_id)
 
-                if getattr(user_manager, 'current_user_id', None) == uid:
-                    user_manager.current_user_id = None
-                print("Profile deleted.")
-            except Exception as e:
-                print("Failed to delete profile:", e)
 
         elif choice == '8':
             break
 
         else:
             print("Invalid option.")
+
+        input("Press Enter to return to menu...")
+    
 
 if __name__ == '__main__':
     main()

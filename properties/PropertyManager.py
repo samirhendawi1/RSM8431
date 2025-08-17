@@ -41,6 +41,7 @@ def generate_properties_csv(filename="properties.csv", count=100):
                 tags=random.sample(tags_list, random.randint(2, 4))
             )
         )
+    random.seed(42)
 
     # Write CSV defensively
     with open(filename, mode="w", newline="", encoding="utf-8") as file:
