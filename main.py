@@ -364,8 +364,15 @@ def main():
                 print("1.Environment")
                 print("2.Price")
                 print("3.They are equally important")
+                print("4. I want to input my own choice")
                 choices = input("which is the more important factor: ").strip()
-                top5 = recommender.recommend(user, candidates, choices)
+                if choices != "4":
+                    top5 = recommender.recommend(user, candidates, choices)
+                elif choices == "4":
+                    print("Please enter your prefer weight for each factor(from 0 to 1)")
+                    env_weight = float(input("Environment weight (0-1): ").strip() or 0.5)
+                    price_weight = float(input("Price weight (0-1): ").strip() or 0.5)
+                    top5 = recommender.recommend(user, candidates, [env_weight, price_weight])
                 export_dir = Path("output")
                 export_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,6 @@
+location,type,nightly_price,features,fit_score
+London,house,385.0,pet friendly,0.218
+London,house,245.0,hot tub,0.206
+Rome,cabin,240.0,WiFi,0.206
+London,cabin,400.0,WiFi,0.198
+Rome,house,385.0,"pet friendly, WiFi",0.197

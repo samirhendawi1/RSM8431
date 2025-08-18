@@ -1,0 +1,6 @@
+location,type,nightly_price,features,fit_score
+Paris,cabin,500.0,pet friendly,0.578
+Rome,cabin,495.0,WiFi,0.575
+London,house,500.0,"WiFi, hot tub, pet friendly",0.574
+London,house,485.0,"WiFi, hot tub, pet friendly",0.566
+Rome,cabin,485.0,"hot tub, pet friendly, WiFi",0.561

@@ -1,0 +1,4 @@
+user_id,name,group_size,environment,budget_min,budget_max
+1,Austin,2,mountain,20.0,2000.0
+2,austin,5,"mountain,lake",20.0,2000.0
+3,aa,2,mountain,2.0,2000.0

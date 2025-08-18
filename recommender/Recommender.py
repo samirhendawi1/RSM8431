@@ -97,6 +97,9 @@ class Recommender:
                 weight_env, weight_budget = 0.7, 0.3
             elif importance == 2:
                 weight_env, weight_budget = 0.3, 0.7
+            elif importance == 4:
+                weight_env = float(kwargs.get("weight_env", 0.5))
+                weight_budget = float(kwargs.get("weight_budget", 0.5))
             else:
                 weight_env, weight_budget = 0.5, 0.5
 
