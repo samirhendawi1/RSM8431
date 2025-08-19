@@ -110,15 +110,18 @@ def _get_api_key() -> str:
         pass
     return (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 
+# AFTER  (pass api_key explicitly; add minimal visibility on failures)
 def _llm_from_context():
     key = _get_api_key()
     if not key:
         return None
-    os.environ["OPENROUTER_API_KEY"] = key
     try:
-        return LLMHelper(csv_path=DATA_PATH, request_timeout=8)
-    except Exception:
+        # If your LLMHelper supports model override, add model="deepseek/deepseek-chat" (or your choice)
+        return LLMHelper(api_key=key, csv_path=DATA_PATH, request_timeout=15)
+    except Exception as e:
+        st.warning(f"LLM init failed: {e}")
         return None
+
 
 def _latest_recs_path_for_user(u: User) -> Path | None:
     """Prefer username-based CSV; fallback to name; then latest containing username."""
@@ -463,8 +466,14 @@ with tab_find:
                             + (", ".join(parts) + "." if parts else ".")
                     )
                 resp = llm.generate_travel_blurb(prompt)
-                if isinstance(resp, str) and not resp.startswith("ERROR:"):
-                    blurb = resp
+                if isinstance(resp, str):
+                    if resp.strip().startswith("ERROR:"):
+                        st.warning(resp)  # show the error instead of silently falling back
+                    elif resp.strip():
+                        blurb = resp.strip()
+                elif isinstance(resp, dict) and resp.get("error"):
+                    st.warning(f"LLM blurb error: {resp.get('error')}")
+
             except Exception:
                 pass
         if not blurb:
