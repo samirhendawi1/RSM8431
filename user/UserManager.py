@@ -285,3 +285,12 @@ class UserManager:
             print("User deleted.")
         except Exception as e:
             print(f"[ERROR] Failed to delete user: {e}")
+
+        def delete_user_by_username(self, username: str) -> bool:
+            if username in self.users:
+                self.users.pop(username, None)
+                if self.current_username == username:
+                    self.current_username = None
+                self._save()
+                return True
+            return False

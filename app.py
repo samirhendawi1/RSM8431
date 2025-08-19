@@ -97,7 +97,7 @@ with tab_api:
     existing = st.session_state.get("api_key", "")
     key_input = st.text_input("API key", type="password", value=existing, placeholder="sk-or-v1_...", help="Session-only storage.")
 
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2, _ = st.columns([1, 1, 2])
     with col1:
         if st.button("Save key"):
             if key_input:
@@ -141,6 +141,7 @@ with tab_account:
                 if _hash_pw(si_pw, recd.get("salt", "")) == recd.get("password_hash", ""):
                     um.current_username = (si_user or "").strip().lower()
                     st.success(f"Signed in as {um.current_username}")
+                    st.rerun()
                 else:
                     st.error("Invalid credentials.")
 
@@ -172,13 +173,51 @@ with tab_account:
                     um.current_username = (su_user or "").strip().lower()
                     um._save()
                     st.success(f"User '{um.current_username}' created and signed in.")
+                    st.rerun()
     else:
+        # ---------------------- Account Tab (signed-in) ----------------------
         u = um.get_current_user()
         st.write(f"**Signed in as:** `{u.username}`")
         st.write(f"**First name:** `{u.name or '—'}`")
-        if st.button("Sign out (this tab)"):
-            um.sign_out()
-            st.success("Signed out.")
+
+        col_a, _ = st.columns([1, 3])
+        with col_a:
+            if st.button("Sign out"):
+                um.sign_out()
+                st.success("Signed out.")
+                st.rerun()
+
+        st.write("---")
+        with st.expander("🛑 Danger zone", expanded=False):
+            st.markdown("**Delete account** – This permanently removes your user record.")
+            confirm = st.text_input("Type your username to confirm", key="del_confirm_tab")
+            agree = st.checkbox("I understand this cannot be undone.", key="del_ack_tab")
+            delete_clicked = st.button("Delete account", type="primary", key="del_btn_tab")
+
+            if delete_clicked:
+                if not agree:
+                    st.error("Please acknowledge the warning.")
+                elif (confirm or "").strip().lower() != u.username:
+                    st.error("Confirmation did not match your username.")
+                else:
+                    try:
+                        # Prefer dedicated method if present
+                        if hasattr(um, "delete_user_by_username"):
+                            ok = um.delete_user_by_username(u.username)
+                        else:
+                            # Fallback inline delete
+                            um.users.pop(u.username, None)
+                            if um.current_username == u.username:
+                                um.current_username = None
+                            um._save()
+                            ok = True
+                        if ok:
+                            st.success("Your account was deleted.")
+                            st.rerun()
+                        else:
+                            st.error("Could not delete the account (user not found).")
+                    except Exception as e:
+                        st.error(f"Failed to delete account: {e}")
 
 # ---------------------- Find Stays Tab ----------------------
 with tab_find:
