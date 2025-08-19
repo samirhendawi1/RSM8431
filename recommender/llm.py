@@ -1,9 +1,4 @@
-try:
-    from recommender.LLMHelper import LLMHelper
-except Exception as e:
-    # Fallback: define a dummy class so imports don't crash the app
-    class LLMHelper:
-        def __init__(self, *args, **kwargs):
-            raise ImportError(f"LLMHelper could not be imported: {e}")
-
+# Keep your existing import path stable:
+# from recommender.llm import LLMHelper
+from recommender.LLMHelper import LLMHelper  # assumes this file lives in recommender/
 __all__ = ["LLMHelper"]

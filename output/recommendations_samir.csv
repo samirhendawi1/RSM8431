@@ -1,0 +1,6 @@
+property_id,location,type,nightly_price,min_guests,max_guests,features,tags,fit_score
+112,Austin,beach,295.0,2,5,"AC, WiFi, kitchen, parking","downtown, nightlife, remote",0.6114285714285714
+87,Montreal,beach,675.0,2,6,"AC, WiFi, dryer, gym, parking","quiet, romantic",0.6047619047619048
+95,Los Angeles,city,447.0,2,4,"WiFi, hot tub, parking","city, luxury, quiet, remote",0.5982857142857143
+20,Barcelona,island,447.0,2,7,"WiFi, dryer, hot tub, kitchen, pool","hiking, island, nightlife, scenic",0.5982857142857143
+14,London,island,439.0,1,3,"parking, pool","hiking, nightlife",0.5937142857142857

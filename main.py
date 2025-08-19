@@ -1,504 +1,217 @@
+import os
+from pathlib import Path
+
 from user.UserManager import UserManager
 from properties.PropertyManager import PropertyManager, generate_properties_csv
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
 from smart_search import SmartSearch
-import os
-from pathlib import Path
-from datetime import datetime
-import pandas as pd
 
-# ---- additions for error handling ----
-import builtins
-import sys
 
-def say_error(msg, err=None):
-    try:
-        if err:
-            print(f"[error] {msg}: {err}")
-        else:
-            print(f"[error] {msg}")
-    except Exception:
-        print("[error] unexpected printing failure")
+def _safe_filename(s: str) -> str:
+    s = s or ""
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
 
-_original_input = builtins.input
-def ask_input_safely(prompt: str):
-    try:
-        if prompt == "Choose an option: ":
-            valid = {"1","2","3","4","5","6","7","8","9"}
-            while True:
-                try:
-                    ans = _original_input(prompt)
-                except (EOFError, KeyboardInterrupt):
-                    print("[info] exiting")
-                    return "8"
-                if ans is None:
-                    continue
-                ans = str(ans).strip()
-                if ans in valid:
-                    return ans
-                print("Please enter a number from 1 to 9.")
-        elif prompt.startswith("Type DELETE to remove profile"):
-            while True:
-                try:
-                    ans = _original_input(prompt)
-                except (EOFError, KeyboardInterrupt):
-                    print("[info] delete cancelled")
-                    return "cancel"
-                if ans is None:
-                    continue
-                s = str(ans).strip()
-                if s == "DELETE" or s.lower() == "cancel":
-                    return s
-                print("Please type exactly DELETE, or 'cancel' to stop.")
-        else:
-            return _original_input(prompt)
-    except (EOFError, KeyboardInterrupt):
-        print("[info] input cancelled")
-        return ""
-builtins.input = ask_input_safely
 
-# Wrap the CSV generator so failures don’t crash the app
-_original_generate_properties_csv = generate_properties_csv
-def generate_properties_csv(path: str, n: int):
-    try:
-        return _original_generate_properties_csv(path, n)
-    except Exception as e:
-        say_error("could not generate demo properties; continuing", e)
-globals()["generate_properties_csv"] = generate_properties_csv
-
-# LLM wrappers (don’t crash the app if LLM calls fail)
-try:
-    _orig_llm_blurb = LLMHelper.generate_travel_blurb
-    def generate_travel_blurb(self, prompt: str):
-        try:
-            return _orig_llm_blurb(self, prompt)
-        except Exception as e:
-            say_error("llm blurb failed", e)
-            return "Sorry, I couldn't generate a blurb right now."
-    LLMHelper.generate_travel_blurb = generate_travel_blurb
-
-    if hasattr(LLMHelper, "search"):
-        _orig_llm_search = LLMHelper.search
-        def search(self, query: str):
-            try:
-                return _orig_llm_search(self, query)
-            except Exception as e:
-                say_error("llm search failed", e)
-                return {"tags": [], "property_ids": []}
-        LLMHelper.search = search
-except Exception as e:
-    say_error("llm wrappers setup failed", e)
-
-def student_excepthook(exc_type, exc, tb):
-    print(f"[error] unexpected issue: {exc_type.__name__}: {exc}")
-sys.excepthook = student_excepthook
-
-# ---------- Helpers ----------
-def _derive_available_envs(df):
-    """Infer available 'environments' from tags/type/environment columns."""
-    envs = set()
-    dd = df.copy()
-    dd.columns = [c.lower() for c in dd.columns]
-
-    if "tags" in dd.columns:
-        tags_series = dd["tags"].fillna("").astype(str).str.lower()
-        for parts in tags_series.str.split(","):
-            for t in parts:
-                t = t.strip()
-                if t:
-                    envs.add(t)
-
-    if "type" in dd.columns:
-        envs |= set(dd["type"].fillna("").astype(str).str.lower().unique().tolist())
-
-    if "environment" in dd.columns:
-        envs |= set(dd["environment"].fillna("").astype(str).str.lower().unique().tolist())
-
-    return {e for e in envs if e and e != "nan"}
-
-def _normalize_environment(raw_env, ss: SmartSearch, available_envs):
-    """Map user-entered environment to the closest dataset environment."""
-    raw = (raw_env or "").strip().lower()
-    if not raw:
-        return raw_env
-    toks = ss.canonicalize_tags([raw])  # alias expansion
-    candidates = [raw] + toks
-    for cand in candidates:
-        if cand in available_envs:
-            return cand
-    for cand in available_envs:
-        if raw in cand:
-            return cand
-    return raw_env
-
-def _print_profile(user):
-    def _filter_listings(df):
-        """
-        Interactive filter: all prompts are optional. Case-insensitive substring matching.
-        Filters supported:
-          - min price
-          - max price
-          - location contains
-          - type contains
-          - features contains (comma-separated tokens, all must be present)
-          - tags contains (comma-separated tokens, all must be present)
-        Returns the filtered DataFrame (could be empty).
-        """
-        try:
-            import pandas as pd
-            d = df.copy()
-            # Normalize
-            d.columns = [str(c).lower() for c in d.columns]
-            for col in ["location","type","features","tags"]:
-                if col in d.columns:
-                    d[col] = d[col].fillna("").astype(str)
-
-            # Min / max price
-            try:
-                s = input("Min price (press Enter to skip): ").strip()
-                if s:
-                    mn = float(s)
-                    if "nightly_price" in d.columns:
-                        d = d[pd.to_numeric(d["nightly_price"], errors="coerce") >= mn]
-            except Exception:
-                pass
-            try:
-                s = input("Max price (press Enter to skip): ").strip()
-                if s:
-                    mx = float(s)
-                    if "nightly_price" in d.columns:
-                        d = d[pd.to_numeric(d["nightly_price"], errors="coerce") <= mx]
-            except Exception:
-                pass
-
-            # Location / type contains
-            locq = input("Location contains (skip to ignore): ").strip().lower()
-            if locq and "location" in d.columns:
-                d = d[d["location"].str.lower().str.contains(locq, na=False)]
-
-            typq = input("Type contains (skip to ignore): ").strip().lower()
-            if typq and "type" in d.columns:
-                d = d[d["type"].str.lower().str.contains(typq, na=False)]
-
-            # Features / tags (AND over tokens)
-            def tokenize_csv(s):
-                return [t.strip().lower() for t in s.split(",") if t.strip()]
-
-            fq = input("Features include (comma-separated, all must match; skip to ignore): ").strip()
-            if fq and "features" in d.columns:
-                toks = tokenize_csv(fq)
-                for t in toks:
-                    d = d[d["features"].str.lower().str.contains(t, na=False)]
-
-            tg = input("Tags include (comma-separated, all must match; skip to ignore): ").strip()
-            if tg and "tags" in d.columns:
-                toks = tokenize_csv(tg)
-                for t in toks:
-                    d = d[d["tags"].str.lower().str.contains(t, na=False)]
-
-            # Pretty print
-            try:
-                show_cols = [c for c in ["location","type","nightly_price","features","tags"] if c in d.columns]
-                if not show_cols:
-                    show_cols = list(d.columns)
-                print("\nFiltered results\n-----------------")
-                if len(d) == 0:
-                    print("(no rows matched)")
-                else:
-                    print(d[show_cols].head(50).to_string(index=False))
-                    if len(d) > 50:
-                        print(f"... ({len(d)-50} more rows not shown)")
-            except Exception:
-                print("(could not pretty-print results)")
-
-            # Offer export
-            try:
-                ans = input("Export results to CSV? (y/N): ").strip().lower()
-                if ans == "y":
-                    from pathlib import Path
-                    out = Path("output/filtered_listings.csv")
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    d.to_csv(out, index=False, encoding="utf-8")
-                    print(f"Saved: {out}")
-            except Exception:
-                pass
-
-            return d
-        except Exception as e:
-            print("[error] filter failed:", e)
-            return df
-
-        print("\n--- Current User Profile ---")
-        print(f"ID:            {getattr(user, 'user_id', 'N/A')}")
-        print(f"Name:          {getattr(user, 'name', 'N/A')}")
-        print(f"Group size:    {getattr(user, 'group_size', 'N/A')}")
-        print(f"Environment:   {getattr(user, 'environment', 'N/A')}")
-        print(f"Budget min:    {getattr(user, 'budget_min', 'N/A')}")
-        print(f"Budget max:    {getattr(user, 'budget_max', 'N/A')}")
-        print("-----------------------------\n")
-
-# ---------- Main ----------
 def main():
-
-    # Generate demo data (keep as per your flow)
-    generate_properties_csv("data/properties.csv", 100)
+    # Use the file you actually have in your repo
+    data_path = "data/properties_with_capacity_types.csv"
+    if not os.path.isfile(data_path):
+        generate_properties_csv(data_path, 140)
 
     user_manager = UserManager()
-    property_manager = PropertyManager('data/properties.csv')
-    recommender = Recommender()
-    # Short timeout; skip LLM if no API key
-    llm = LLMHelper(csv_path="data/properties_expanded.csv", request_timeout=6)
-    ss = SmartSearch(property_manager.properties)
+    pm = PropertyManager(data_path)
 
-    available_envs = _derive_available_envs(property_manager.properties)
+    # Recommender: env, budget, group; llm_weight tunes LLM influence
+    rec = Recommender(top_k=5, weights=(0.4, 0.4, 0.2), llm_weight=0.25)
+
+    # SmartSearch pre-filter
+    ss = SmartSearch(pm.properties)
+
+    # LLM helper (works with env var or interactive prompt)
+    try:
+        llm = LLMHelper(csv_path=data_path, request_timeout=8)
+    except Exception:
+        llm = None
 
     while True:
         print("\nMenu:")
-        print("1. Create User")
-        print("2. Edit Profile")
-        print("3. View Profile")
-        print("4. Show Properties")
-        print("5. Get Recommendations (exports CSV)")
-        print("6. Generate a blurb via a LLM")
-        print("7. Delete Profile")
-        print("8. Exit")
-        print("9. Filter/Search listings")
+        print("1. Sign up")
+        print("2. Sign in")
+        print("3. Sign out")
+        print("4. Edit profile")
+        print("5. View profile")
+        print("6. Show properties")
+        print("7. Get recommendations (exports CSV)")
+        print("8. Search and Filter Properties")
+        print("9. Delete profile")
+        print("0. Exit")
 
         choice = input("Choose an option: ").strip()
 
-        if choice == '1':
-            if hasattr(user_manager, 'create_user'):
-                user_manager.create_user()
-                user = getattr(user_manager, 'get_current_user', lambda: None)()
-                if user and getattr(user, 'environment', None):
-                    old_env = user.environment
-                    new_env = _normalize_environment(old_env, ss, available_envs)
-                    if new_env != old_env:
-                        user.environment = new_env
-                        print(f"(Adjusted environment: '{old_env}' → '{new_env}' based on dataset)")
-            else:
-                print("Create user is not available in UserManager.")
+        if choice == "1":
+            user_manager.sign_up()
 
-        elif choice == '2':
-            if hasattr(user_manager, 'edit_profile'):
-                user_manager.edit_profile()
-                user = getattr(user_manager, 'get_current_user', lambda: None)()
-                if user and getattr(user, 'environment', None):
-                    old_env = user.environment
-                    new_env = _normalize_environment(old_env, ss, available_envs)
-                    if new_env != old_env:
-                        user.environment = new_env
-                        print(f"(Adjusted environment: '{old_env}' → '{new_env}' based on dataset)")
-            else:
-                print("Edit profile is not available in UserManager.")
+        elif choice == "2":
+            user_manager.sign_in()
 
-        elif choice == '3':
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
-            if user:
-                _print_profile(user)
-            else:
-                print("No user selected.")
+        elif choice == "3":
+            user_manager.sign_out()
 
-        elif choice == '4':
-            if hasattr(property_manager, 'display_properties'):
-                property_manager.display_properties()
-            else:
-                print("Property display is not available.")
+        elif choice == "4":
+            user_manager.edit_profile()
 
-        elif choice == '5':
-            # FIX: All of this block was previously unindented
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
-            if user is None:
-                print("No user selected.")
+        elif choice == "5":
+            # Minimal profile view (username only)
+            user_manager.view_profile()
+
+            # Show last 5 recommendations for the current user, if any exist
+            u = user_manager.get_current_user()
+            if not u:
                 continue
 
-            # Validate budgets before recommending
-            try:
-                bmin = float(getattr(user, "budget_min", 0))
-                bmax = float(getattr(user, "budget_max", 0))
-                if bmin <= 0 or bmax <= 0:
-                    print("Invalid budget(s). Please edit your profile to set positive budgets.")
-                    continue
-                if bmin > bmax:
-                    print("Invalid budget range (min > max). Please edit your profile.")
-                    continue
-            except Exception:
-                print("Budget values look invalid. Please edit your profile.")
-                continue
+            # Try both filename patterns: by 'name' (legacy) and by 'username' (fallback)
+            def _safe_filename(s):
+                s = s or ""
+                return "".join(ch if ch.isalnum() or ch in ("-","_") else "_" for ch in s).strip("_")
 
-            # Optional freeform query + LLM assist
-            freeform = input("Add any tags, features, or describe the property (optional): ").strip()
-            ss = SmartSearch(property_manager.properties)
-            candidates = property_manager.properties
-            llm_tags, llm_ids = [], []
+            candidates = [
+                Path("output") / f"recommendations_{_safe_filename(u.name)}.csv",
+                Path("output") / f"recommendations_{_safe_filename(u.username)}.csv",
+                ]
+            latest = None
+            for p in candidates:
+                if p.is_file():
+                    latest = p
+                    break
 
-            if freeform:
-                candidates = ss.find_candidates(freeform, top_k=300)
-                if os.getenv("OPENROUTER_API_KEY"):
-                    try:
-                        resp = llm.search(freeform)
-                        if isinstance(resp, dict) and "error" not in resp:
-                            llm_tags = resp.get("tags", []) or []
-                            llm_ids  = resp.get("property_ids", []) or []
-                    except Exception:
-                        pass
-
-            # Boost candidates if LLM gave tags/IDs
-            llm_tags = ss.canonicalize_tags(llm_tags)
-            textcol = "__fulltext__" if "__fulltext__" in candidates.columns else None
-            if llm_tags and textcol:
-                has_tag = candidates[textcol].fillna("").astype(str).apply(
-                    lambda t: any(tag in t for tag in llm_tags)
-                )
-                candidates = candidates.copy()
-                candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + has_tag.astype(float) * 0.15
-
-            if llm_ids and "property_id" in candidates.columns:
-                candidates = candidates.copy()
-                candidates["semantic_score"] = candidates.get("semantic_score", 0.0) + \
-                                               candidates["property_id"].isin(llm_ids).astype(float) * 0.20
-
-            # Recommend + export
-            try:
-                print("1.Environment")
-                print("2.Price")
-                print("3.They are equally important")
-                print("4. I want to input my own choice")
-                choices = input("which is the more important factor: ").strip()
-                if choices != "4":
-                    top5 = recommender.recommend(user, candidates, choices)
-                elif choices == "4":
-                    print("Please enter your prefer weight for each factor(from 0 to 1)")
-                    env_weight = float(input("Environment weight (0-1): ").strip() or 0.5)
-                    price_weight = float(input("Price weight (0-1): ").strip() or 0.5)
-                    top5 = recommender.recommend(user, candidates, [env_weight, price_weight])
-                export_dir = Path("output")
-                export_dir.mkdir(parents=True, exist_ok=True)
-
-                def _safe_filename(s):
-                    s = s or ""
-                    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
-
-                user_suffix = _safe_filename(getattr(user, "name", None))
-                fname = f"recommendations_{user_suffix}.csv" if user_suffix else "recommendations.csv"
-                output_path = export_dir / fname
-
+            if latest is None:
+                # If nothing matched, try to find any file that includes the username
                 try:
-                    import pandas as _pd
-                    if not isinstance(top5, _pd.DataFrame):
-                        top5 = _pd.DataFrame(top5)
+                    outs = sorted(Path("output").glob("recommendations_*.csv"), key=lambda x: x.stat().st_mtime, reverse=True)
+                    for p in outs:
+                        if u.username in p.name or _safe_filename(u.name) in p.name:
+                            latest = p
+                            break
                 except Exception:
-                    pass
+                    latest = None
 
-                preferred_cols = [c for c in ["location", "type", "nightly_price", "features", "fit_score"] if c in top5.columns]
-                df_to_save = top5[preferred_cols] if preferred_cols else top5
-
-                df_to_save.to_csv(output_path, index=False, encoding="utf-8")
-                print(f"\nTop 5 recommendations saved to: {output_path}")
-            except Exception as e:
-                print("Error generating recommendations:", e)
-
-
-        elif choice == '9':
-            try:
-                _filter_listings(property_manager.properties)
-            except Exception as e:
-                say_error("filter/search failed", e)
-
-        elif choice == '6':
-            # FIX: This elif was wrongly nested inside the except block above
-            user = user_manager.get_current_user() if hasattr(user_manager, 'get_current_user') else None
-            if user:
-                prompt = (
-                    f"Write a fun intro for a user looking for a {user.environment} stay "
-                    f"with {user.group_size} friends under ${user.budget_max}/night."
-                )
-                print("\nLLM Response:")
-                print(llm.generate_travel_blurb(prompt))
+            if latest is None:
+                print("No past recommendations found.")
             else:
-                print("No user selected.")
+                try:
+                    import pandas as pd
+                    df = pd.read_csv(latest)
+                    print(f"Latest recommendations file: {latest}")
+                    # Show the first 5 rows with useful columns if present
+                    preferred = [c for c in [
+                        "property_id","location","environment","property_type","nightly_price",
+                        "min_guests","max_guests","features","tags","fit_score"
+                    ] if c in df.columns]
+                    print(df[preferred].head(5).to_string(index=False))
+                except Exception as e:
+                    print(f"Could not read {latest}: {e}")
 
-        elif choice == '7':
+        elif choice == "6":
+            pm.display_properties()
+
+        elif choice == "7":
             user = user_manager.get_current_user()
             if not user:
-                print("No user selected.")
-                continue
-            confirm = input(f"Type DELETE to remove profile '{user.name}': ").strip()
-            if confirm != "DELETE":
-                print("Cancelled.")
+                print("Sign in first.")
                 continue
 
-            user_manager.delete_user(user.user_id)
+            freeform = input("Describe preferences (optional free-text): ").strip()
+            candidates = pm.properties
+            llm_tags, llm_ids = [], []
+            blurb = None
 
+            # Use SmartSearch when user types something
+            if freeform:
+                try:
+                    candidates = ss.find_candidates(freeform, top_k=300)
+                except Exception:
+                    candidates = pm.properties
 
-        elif choice == '8':
+                # IMPORTANT: gate on llm.api_key (works for env OR getpass)
+                if llm and getattr(llm, "api_key", ""):
+                    # Tags / IDs for scoring
+                    try:
+                        resp = llm.search(freeform)
+                        if isinstance(resp, dict):
+                            llm_tags = resp.get("tags", []) or []
+                            llm_ids = resp.get("property_ids", []) or []
+                    except Exception as e:
+                        print("LLM search error:", e)
+
+                    # Short blurb for the result header
+                    try:
+                        blurb_resp = llm.generate_travel_blurb(freeform)
+                        if isinstance(blurb_resp, str) and not blurb_resp.startswith("ERROR:"):
+                            blurb = blurb_resp
+                        else:
+                            # Surface the error once so you know what's wrong
+                            if isinstance(blurb_resp, str) and blurb_resp.startswith("ERROR:"):
+                                print("LLM blurb error:", blurb_resp)
+                    except Exception as e:
+                        print("LLM blurb exception:", e)
+
+            # Rank & export
+            top5 = rec.recommend(user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
+
+            Path("output").mkdir(parents=True, exist_ok=True)
+            fname = f"recommendations_{_safe_filename(user.name)}.csv"
+            out = Path("output") / fname
+            top5.to_csv(out, index=False, encoding="utf-8")
+
+            # Print blurb then table
+            if blurb:
+                print("\n— Blurb —")
+                print(blurb)
+
+            print(f"\nTop 5 saved to: {out}")
+            print(top5.to_string(index=False))
+
+        elif choice == "8":
+            # Simple filter utility
+            d = pm.properties
+            print(f"\nRows in dataset: {len(d)}")
+            loc = input("Location contains (or blank): ").strip().lower()
+            if loc:
+                d = d[d["location"].str.lower().str.contains(loc, na=False)]
+            typ = input("Property type contains (or blank): ").strip().lower()
+            if typ:
+                # property_type is the correct column name in your dataset
+                d = d[d["property_type"].str.lower().str.contains(typ, na=False)]
+            pmin = input("Min price (or blank): ").strip()
+            pmax = input("Max price (or blank): ").strip()
+            try:
+                if pmin: d = d[d["nightly_price"] >= float(pmin)]
+                if pmax: d = d[d["nightly_price"] <= float(pmax)]
+            except Exception:
+                pass
+            gs = input("Group size (or blank): ").strip()
+            try:
+                if gs:
+                    g = int(gs)
+                    d = d[(d["min_guests"] <= g) & (g <= d["max_guests"])]
+            except Exception:
+                pass
+            print("\nResults:")
+            show = [c for c in ["property_id","location","property_type","nightly_price",
+                                "min_guests","max_guests","features","tags"] if c in d.columns]
+            print(d[show].head(50).to_string(index=False))
+
+        elif choice == "9":
+            user_manager.delete_user()
+
+        elif choice == "0":
+            print("Bye.")
             break
 
         else:
-            print("Invalid option.")
-
-        input("Press Enter to return to menu...")
+            print("Invalid choice.")
 
 
-def _filter_listings(df: pd.DataFrame):
-    try:
-        print("\n--- Filter/Search Listings ---")
-        if df.empty:
-            print("No listings available to search.")
-            return
-
-        # Collect filters
-        min_price = input("Minimum price (or Enter to skip): ").strip()
-        max_price = input("Maximum price (or Enter to skip): ").strip()
-        location = input("Location contains (or Enter to skip): ").strip().lower()
-        ptype = input("Type contains (or Enter to skip): ").strip().lower()
-        features = input("Features include (comma-separated, or Enter to skip): ").strip().lower()
-        tags = input("Tags include (comma-separated, or Enter to skip): ").strip().lower()
-
-        results = df.copy()
-
-        # Price filters
-        if min_price:
-            results = results[results["nightly_price"] >= float(min_price)]
-        if max_price:
-            results = results[results["nightly_price"] <= float(max_price)]
-
-        # String filters
-        if location:
-            results = results[results["location"].str.lower().str.contains(location)]
-        if ptype:
-            results = results[results["type"].str.lower().str.contains(ptype)]
-
-        # Features filter (AND match)
-        if features:
-            feats = [f.strip() for f in features.split(",") if f.strip()]
-            for f in feats:
-                results = results[results["features"].str.lower().str.contains(f)]
-
-        # Tags filter (AND match)
-        if tags:
-            taglist = [t.strip() for t in tags.split(",") if t.strip()]
-            for t in taglist:
-                results = results[results["tags"].str.lower().str.contains(t)]
-
-        # Show results
-        if results.empty:
-            print("\nNo listings matched your filters.")
-        else:
-            print("\nFiltered Listings (showing up to 50):")
-            print(results.head(50).to_string(index=False))
-
-            # Optionally export
-            save = input("\nSave results to CSV? (y/n): ").strip().lower()
-            if save == "y":
-                outpath = "output/filtered_listings.csv"
-                results.to_csv(outpath, index=False)
-                print(f"Filtered listings saved to {outpath}")
-
-    except Exception as e:
-        print(f"[error] filter/search failed: {e}")
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
