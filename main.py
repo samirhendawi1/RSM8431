@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from user.UserManager import UserManager
+from user.UserManager import UserManager, User
 from properties.PropertyManager import PropertyManager, generate_properties_csv
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
@@ -22,7 +22,7 @@ def main():
     user_manager = UserManager()
     pm = PropertyManager(data_path)
 
-    # Recommender: env, budget, group; llm_weight tunes LLM influence
+    # Default recommender
     rec = Recommender(top_k=5, weights=(0.4, 0.4, 0.2), llm_weight=0.25)
 
     # SmartSearch pre-filter
@@ -62,18 +62,10 @@ def main():
             user_manager.edit_profile()
 
         elif choice == "5":
-            # Minimal profile view (username only)
             user_manager.view_profile()
-
-            # Show last 5 recommendations for the current user, if any exist
             u = user_manager.get_current_user()
             if not u:
                 continue
-
-            # Try both filename patterns: by 'name' (legacy) and by 'username' (fallback)
-            def _safe_filename(s):
-                s = s or ""
-                return "".join(ch if ch.isalnum() or ch in ("-","_") else "_" for ch in s).strip("_")
 
             candidates = [
                 Path("output") / f"recommendations_{_safe_filename(u.name)}.csv",
@@ -86,9 +78,9 @@ def main():
                     break
 
             if latest is None:
-                # If nothing matched, try to find any file that includes the username
                 try:
-                    outs = sorted(Path("output").glob("recommendations_*.csv"), key=lambda x: x.stat().st_mtime, reverse=True)
+                    outs = sorted(Path("output").glob("recommendations_*.csv"),
+                                  key=lambda x: x.stat().st_mtime, reverse=True)
                     for p in outs:
                         if u.username in p.name or _safe_filename(u.name) in p.name:
                             latest = p
@@ -103,10 +95,9 @@ def main():
                     import pandas as pd
                     df = pd.read_csv(latest)
                     print(f"Latest recommendations file: {latest}")
-                    # Show the first 5 rows with useful columns if present
                     preferred = [c for c in [
-                        "property_id","location","environment","property_type","nightly_price",
-                        "min_guests","max_guests","features","tags","fit_score"
+                        "property_id", "location", "environment", "property_type", "nightly_price",
+                        "min_guests", "max_guests", "features", "tags", "fit_score"
                     ] if c in df.columns]
                     print(df[preferred].head(5).to_string(index=False))
                 except Exception as e:
@@ -121,21 +112,51 @@ def main():
                 print("Sign in first.")
                 continue
 
-            freeform = input("Describe preferences (optional free-text): ").strip()
-            candidates = pm.properties
-            llm_tags, llm_ids = [], []
-            blurb = None
+            print("\n-- Recommendation Inputs (blank keeps default) --")
+            loc = input("Location contains (optional): ").strip()
+            env_in = input(f"Environment [{user.environment or 'none'}]: ").strip().lower() or user.environment
+            gs_in = input(f"Group size [{user.group_size}]: ").strip()
+            bmin_in = input(f"Budget min [{user.budget_min}]: ").strip()
+            bmax_in = input(f"Budget max [{user.budget_max}]: ").strip()
 
-            # Use SmartSearch when user types something
+            try:
+                group_size = int(gs_in) if gs_in else int(getattr(user, "group_size", 0) or 0)
+            except Exception:
+                group_size = int(getattr(user, "group_size", 0) or 0)
+
+            try:
+                budget_min = float(bmin_in) if bmin_in else float(getattr(user, "budget_min", 0) or 0)
+            except Exception:
+                budget_min = float(getattr(user, "budget_min", 0) or 0)
+
+            try:
+                budget_max = float(bmax_in) if bmax_in else float(getattr(user, "budget_max", 0) or 0)
+            except Exception:
+                budget_max = float(getattr(user, "budget_max", 0) or 0)
+
+            if budget_min > budget_max:
+                print("Budget min cannot exceed budget max. Swapping.")
+                budget_min, budget_max = budget_max, budget_min
+
+            freeform = input("\nDescribe preferences (optional free-text): ").strip()
+            candidates = pm.properties
+
+            if loc:
+                try:
+                    candidates = candidates[candidates["location"].str.lower().str.contains(loc.lower(), na=False)]
+                except Exception:
+                    pass
+
+            llm_tags, llm_ids, blurb = [], [], None
+
             if freeform:
                 try:
+                    ss = SmartSearch(candidates)
                     candidates = ss.find_candidates(freeform, top_k=300)
                 except Exception:
-                    candidates = pm.properties
+                    pass
 
-                # IMPORTANT: gate on llm.api_key (works for env OR getpass)
                 if llm and getattr(llm, "api_key", ""):
-                    # Tags / IDs for scoring
                     try:
                         resp = llm.search(freeform)
                         if isinstance(resp, dict):
@@ -144,36 +165,45 @@ def main():
                     except Exception as e:
                         print("LLM search error:", e)
 
-                    # Short blurb for the result header
                     try:
                         blurb_resp = llm.generate_travel_blurb(freeform)
                         if isinstance(blurb_resp, str) and not blurb_resp.startswith("ERROR:"):
                             blurb = blurb_resp
-                        else:
-                            # Surface the error once so you know what's wrong
-                            if isinstance(blurb_resp, str) and blurb_resp.startswith("ERROR:"):
-                                print("LLM blurb error:", blurb_resp)
+                        elif isinstance(blurb_resp, str) and blurb_resp.startswith("ERROR:"):
+                            print("LLM blurb error:", blurb_resp)
                     except Exception as e:
                         print("LLM blurb exception:", e)
 
-            # Rank & export
-            top5 = rec.recommend(user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
+            tmp_user = User(
+                username=getattr(user, "username", ""),
+                name=getattr(user, "name", ""),
+                group_size=group_size,
+                environment=env_in,
+                budget_min=budget_min,
+                budget_max=budget_max,
+            )
+
+            top5 = rec.recommend(tmp_user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
 
             Path("output").mkdir(parents=True, exist_ok=True)
-            fname = f"recommendations_{_safe_filename(user.name)}.csv"
+            fname = f"recommendations_{_safe_filename(user.name or user.username)}.csv"
             out = Path("output") / fname
-            top5.to_csv(out, index=False, encoding="utf-8")
+            try:
+                top5.to_csv(out, index=False, encoding="utf-8")
+            except Exception as e:
+                print(f"Failed to save CSV: {e}")
 
-            # Print blurb then table
             if blurb:
                 print("\n— Blurb —")
                 print(blurb)
 
             print(f"\nTop 5 saved to: {out}")
-            print(top5.to_string(index=False))
+            try:
+                print(top5.to_string(index=False))
+            except Exception:
+                print(top5.head(5))
 
         elif choice == "8":
-            # Simple filter utility
             d = pm.properties
             print(f"\nRows in dataset: {len(d)}")
             loc = input("Location contains (or blank): ").strip().lower()
@@ -181,13 +211,14 @@ def main():
                 d = d[d["location"].str.lower().str.contains(loc, na=False)]
             typ = input("Property type contains (or blank): ").strip().lower()
             if typ:
-                # property_type is the correct column name in your dataset
                 d = d[d["property_type"].str.lower().str.contains(typ, na=False)]
             pmin = input("Min price (or blank): ").strip()
             pmax = input("Max price (or blank): ").strip()
             try:
-                if pmin: d = d[d["nightly_price"] >= float(pmin)]
-                if pmax: d = d[d["nightly_price"] <= float(pmax)]
+                if pmin:
+                    d = d[d["nightly_price"] >= float(pmin)]
+                if pmax:
+                    d = d[d["nightly_price"] <= float(pmax)]
             except Exception:
                 pass
             gs = input("Group size (or blank): ").strip()
@@ -198,8 +229,8 @@ def main():
             except Exception:
                 pass
             print("\nResults:")
-            show = [c for c in ["property_id","location","property_type","nightly_price",
-                                "min_guests","max_guests","features","tags"] if c in d.columns]
+            show = [c for c in ["property_id", "location", "property_type", "nightly_price",
+                                "min_guests", "max_guests", "features", "tags"] if c in d.columns]
             print(d[show].head(50).to_string(index=False))
 
         elif choice == "9":
