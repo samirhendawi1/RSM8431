@@ -251,14 +251,14 @@ def main():
         elif choice == "8":
             d = pm.properties
             print(f"\nRows in dataset: {len(d)}")
-            loc = input("Location contains (or blank): ").strip().lower()
+            loc = input("Location contains (Click enter if none): ").strip().lower()
             if loc:
                 d = d[d["location"].str.lower().str.contains(loc, na=False)]
-            typ = input("Property type contains (or blank): ").strip().lower()
+            typ = input("Property type (or blank): ").strip().lower()
             if typ:
                 d = d[d["property_type"].str.lower().str.contains(typ, na=False)]
-            pmin = input("Min price (or blank): ").strip()
-            pmax = input("Max price (or blank): ").strip()
+            pmin = input("Minimum price per night: ").strip()
+            pmax = input("Maximum price per night: ").strip()
             try:
                 if pmin:
                     d = d[d["nightly_price"] >= float(pmin)]
@@ -266,7 +266,7 @@ def main():
                     d = d[d["nightly_price"] <= float(pmax)]
             except Exception:
                 pass
-            gs = input("Group size (or blank): ").strip()
+            gs = input("Group size: ").strip()
             try:
                 if gs:
                     g = int(gs)
@@ -286,7 +286,7 @@ def main():
             break
 
         else:
-            print("Invalid choice.")
+            print("Invalid choice, input a number")
 
 
 if __name__ == "__main__":
