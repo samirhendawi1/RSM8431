@@ -5,7 +5,6 @@ import pandas as pd
 import streamlit as st
 
 from user.UserManager import UserManager, User, _hash_pw, _validate_password  # uses your existing helpers
-from properties.PropertyManager import PropertyManager, generate_properties_csv
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
 from smart_search import SmartSearch
@@ -35,10 +34,56 @@ def _compose_fallback_blurb(first_name, loc, env_in, group, bmin, bmax):
 
 @st.cache_data
 def load_properties(path):
+    """
+    Read CSV read-only and preserve IDs exactly as present.
+    Returns (None, df) to keep the existing unpacking: pm, df_all = load_properties(...)
+    """
     if not Path(path).exists():
-        generate_properties_csv(path, 140)
-    pm = PropertyManager(path)
-    return pm, pm.properties
+        # If the CSV is truly missing, fail fast (do NOT generate anything).
+        raise FileNotFoundError(f"Missing CSV at {path}. Add it and reload the app.")
+
+    # Read as strings to avoid pandas coercing IDs to numbers/NaN
+    df = pd.read_csv(path, dtype=str)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # Map common ID headers -> property_id, keep as string
+    id_col = None
+    for cand in ["property_id", "Property ID", "PROPERTY_ID", "id", "ID"]:
+        if cand in df.columns:
+            id_col = cand
+            break
+    if id_col and id_col != "property_id":
+        df = df.rename(columns={id_col: "property_id"})
+    elif not id_col:
+        # If the CSV truly lacks an ID column, create stable 1..N (strings; never zero)
+        df["property_id"] = (df.index + 1).astype(str)
+
+    # Clean/standardize types (do NOT touch property_id)
+    df["property_id"] = df["property_id"].astype(str).str.strip()
+
+    # Make sure expected columns exist; fill missing ones in-memory only
+    for c in ["location","environment","property_type","nightly_price",
+              "features","tags","min_guests","max_guests"]:
+        if c not in df.columns:
+            df[c] = "" if c in {"location","environment","property_type","features","tags"} else "0"
+
+    # Convert numeric columns safely (they were read as str above)
+    for c in ["nightly_price"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    for c in ["min_guests","max_guests"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+
+    # Build __fulltext__ for SmartSearch (purely in-memory)
+    df["__fulltext__"] = (
+            df["location"].fillna("") + " " +
+            df["environment"].fillna("") + " " +
+            df["property_type"].fillna("") + " " +
+            df["features"].fillna("") + " " +
+            df["tags"].fillna("")
+    ).str.lower()
+
+    return None, df  # keep your existing 'pm, df_all = ...' line working
+
 
 def _init_user_manager():
     if "um" not in st.session_state:
@@ -315,9 +360,9 @@ with tab_filter:
     env_pref = c3.text_input("Environment contains (beach/city/mountain/desert/lake)").strip().lower()
 
     c4, c5, c6 = st.columns(3)
-    pmin = c4.number_input("Min price", min_value=0, value=0, step=10)
-    pmax = c5.number_input("Max price", min_value=0, value=0, step=10)
-    gs = c6.number_input("Group size", min_value=0, value=0, step=1)
+    pmin = c4.number_input("Min price", min_value=0, value=0, step=10, key="filter_min_price")
+    pmax = c5.number_input("Max price", min_value=0, value=0, step=10, key="filter_max_price")
+    gs   = c6.number_input("Group size", min_value=0, value=0, step=1, key="filter_group_size")
 
     if loc:
         d = d[d["location"].str.lower().str.contains(loc, na=False)]
@@ -353,9 +398,9 @@ with tab_find:
     c1, c2, c3, c4, c5 = st.columns(5)
     loc = c1.text_input("Location contains (optional)")
     env_in = c2.text_input("Environment (e.g., beach, city, mountain)")
-    group_size = c3.number_input("Group size", min_value=0, step=1, value=0)
-    bmin = c4.number_input("Budget min", min_value=0, step=10, value=0)
-    bmax = c5.number_input("Budget max", min_value=0, step=10, value=0)
+    group_size = c3.number_input("Group size", min_value=0, step=1, value=0, key="find_group_size")
+    bmin = c4.number_input("Budget min", min_value=0, step=10, value=0, key="find_budget_min")
+    bmax = c5.number_input("Budget max", min_value=0, step=10, value=0, key="find_budget_max")
     freeform = st.text_area("Extra details (optional)")
 
     if st.button("Get recommendations", key="go_btn_find"):

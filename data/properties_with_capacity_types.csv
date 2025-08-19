@@ -1,0 +1,141 @@
+property_id,location,environment,property_type,nightly_price,features,tags,min_guests,max_guests
+1,Miami,suburban,cabin,580,"AC, pool, washer","downtown, romantic, surfing",2,3
+2,Austin,beach,villa,523,"WiFi, hot tub, washer","remote, romantic",2,7
+3,Toronto,suburban,studio,511,"AC, EV charger, pet friendly","family-friendly, remote, scenic",4,10
+4,Ottawa,island,townhouse,784,"WiFi, gym, pet friendly, washer","budget, business, nightlife, remote",4,5
+5,Barcelona,desert,villa,128,"EV charger, gym","downtown, remote",4,10
+6,Los Angeles,island,townhouse,639,"hot tub, kitchen, pet friendly","business, family-friendly, quiet, scenic",1,3
+7,Calgary,mountain,condo,121,"AC, gym, pet friendly, pool, washer","business, condo, hiking, nightlife, quiet",4,5
+8,Los Angeles,island,semi-detached,60,"WiFi, gym, parking, pool","family-friendly, nightlife, romantic, semi-detached",4,7
+9,Toronto,forest,loft,455,"gym, hot tub","downtown, family-friendly",3,6
+10,Seattle,suburban,detached,661,"dryer, hot tub, parking, pet friendly, pool","downtown, hiking, romantic",2,8
+11,Paris,lake,villa,963,"WiFi, dryer, hot tub, parking, washer","luxury, romantic",4,7
+12,Los Angeles,suburban,loft,592,"AC, gym, pool","nightlife, surfing",2,4
+13,London,beach,townhouse,335,"AC, WiFi, dryer, gym, pool","budget, hiking, luxury, nightlife, remote",3,5
+14,Lisbon,suburban,studio,732,"AC, WiFi, kitchen","budget, family-friendly",1,6
+15,Paris,mountain,cabin,128,"AC, dryer, hot tub, pool","cabin, family-friendly, hiking, mountain",2,9
+16,Lisbon,forest,studio,146,"AC, WiFi, dryer, parking, pet friendly","business, quiet",1,6
+17,Vancouver,mountain,townhouse,714,"kitchen, parking","business, hiking, mountain, student",4,8
+18,Miami,mountain,condo,377,"WiFi, gym","budget, business, downtown, romantic, scenic",4,7
+19,Lisbon,beach,studio,368,"kitchen, pool, washer","beach, downtown, romantic",3,7
+20,Paris,desert,semi-detached,709,"EV charger, gym, hot tub, kitchen, parking","downtown, nightlife, surfing",3,10
+21,Lisbon,beach,townhouse,343,"AC, EV charger, pet friendly","quiet, student",4,8
+22,Paris,suburban,studio,793,"WiFi, dryer, hot tub, kitchen, pet friendly","budget, luxury, skiing, surfing",1,7
+23,Montreal,island,cabin,254,"gym, pool","cabin, downtown, remote, scenic",1,7
+24,Austin,forest,townhouse,760,"AC, pet friendly, pool","business, downtown, family-friendly",1,3
+25,Calgary,desert,studio,612,"gym, hot tub, parking","business, downtown, nightlife, romantic, student",1,5
+26,Austin,forest,cabin,394,"EV charger, gym, hot tub","downtown, forest",4,5
+27,Ottawa,forest,loft,991,"hot tub, washer","downtown, luxury, remote, skiing",4,11
+28,Ottawa,suburban,condo,283,"WiFi, pool","business, condo, downtown, nightlife, scenic",2,7
+29,Lisbon,suburban,cabin,652,"AC, washer","budget, hiking, student",2,7
+30,Austin,desert,loft,747,"AC, EV charger, pet friendly, pool, washer","loft, quiet, romantic",1,6
+31,Toronto,island,condo,611,"dryer, washer","downtown, hiking, nightlife, remote, romantic",1,6
+32,Miami,island,villa,335,"AC, kitchen, pool","downtown, island, luxury, student, villa",3,4
+33,Calgary,island,condo,326,"WiFi, gym, pool","downtown, family-friendly",3,6
+34,London,forest,semi-detached,694,"AC, dryer, hot tub, kitchen, pet friendly","hiking, quiet",4,5
+35,Los Angeles,island,detached,611,"EV charger, gym, washer","hiking, romantic, surfing",3,5
+36,New York,forest,semi-detached,283,"EV charger, gym, pool","nightlife, surfing",4,5
+37,Los Angeles,island,detached,265,"WiFi, gym, hot tub, kitchen, washer","luxury, scenic",2,9
+38,Vancouver,suburban,townhouse,84,"gym, pool","business, nightlife, remote, romantic, skiing",3,9
+39,Vancouver,beach,detached,757,"AC, gym, hot tub, kitchen, parking","hiking, quiet",2,7
+40,New York,beach,condo,924,"AC, kitchen, parking","hiking, quiet, romantic",2,3
+41,Austin,beach,studio,974,"EV charger, dryer","budget, luxury, quiet, skiing, surfing",3,4
+42,London,city,villa,196,"EV charger, gym, parking, pool","business, remote, skiing, villa",3,7
+43,Vancouver,beach,studio,714,"EV charger, pet friendly","romantic, scenic, studio",4,9
+44,Montreal,mountain,villa,587,"EV charger, WiFi, hot tub, parking, pet friendly","hiking, romantic, villa",3,7
+45,Los Angeles,beach,semi-detached,723,"dryer, hot tub, pet friendly, pool, washer","luxury, student",1,7
+46,Miami,mountain,condo,455,"AC, EV charger, pool","downtown, mountain, quiet, remote, surfing",4,9
+47,Ottawa,forest,loft,554,"EV charger, WiFi, pet friendly, washer","budget, downtown, family-friendly, scenic",2,6
+48,Rome,island,condo,979,"WiFi, dryer, hot tub, kitchen","condo, downtown, hiking, quiet, surfing",2,3
+49,Austin,mountain,cabin,207,"WiFi, dryer, parking","mountain, remote",2,9
+50,Toronto,forest,detached,187,"AC, parking, pet friendly, pool","business, hiking, luxury, skiing, student",2,5
+51,London,city,semi-detached,552,"dryer, washer","budget, city, hiking, surfing",2,8
+52,Ottawa,lake,semi-detached,314,"EV charger, WiFi, dryer","luxury, surfing",4,5
+53,Seattle,beach,townhouse,287,"gym, hot tub, pool, washer","downtown, hiking",4,7
+54,Calgary,forest,studio,566,"AC, gym, hot tub","forest, quiet",3,7
+55,Rome,city,studio,217,"kitchen, parking, pool, washer","downtown, remote, romantic, skiing",1,5
+56,Seattle,suburban,cabin,366,"gym, pet friendly","hiking, nightlife",3,7
+57,London,forest,loft,962,"EV charger, dryer, kitchen","hiking, romantic, skiing",4,9
+58,Seattle,desert,cabin,602,"dryer, gym, kitchen, parking","desert, family-friendly, nightlife, skiing, student",3,9
+59,Los Angeles,island,semi-detached,816,"EV charger, dryer, pool, washer","business, downtown, family-friendly, nightlife, surfing",2,7
+60,Toronto,city,loft,82,"dryer, hot tub, pet friendly, pool, washer","nightlife, surfing",1,4
+61,Vancouver,beach,detached,159,"AC, gym, kitchen, parking, washer","beach, quiet, skiing",3,10
+62,New York,city,cabin,559,"kitchen, parking","business, family-friendly",4,11
+63,Vancouver,suburban,condo,596,"dryer, hot tub, parking, pool","downtown, hiking",2,8
+64,Los Angeles,city,studio,269,"WiFi, dryer, gym, pet friendly, washer","budget, hiking, remote, scenic, surfing",2,9
+65,Lisbon,city,condo,831,"AC, WiFi, dryer, kitchen, washer","nightlife, quiet",3,5
+66,Seattle,lake,cabin,669,"parking, pet friendly, pool","business, lake, scenic, skiing, surfing",4,11
+67,Ottawa,suburban,villa,996,"AC, WiFi, gym, parking","nightlife, quiet",4,9
+68,Rome,desert,condo,733,"AC, EV charger, kitchen","downtown, hiking",4,9
+69,Barcelona,city,villa,220,"EV charger, pet friendly, pool, washer","budget, nightlife, remote",2,3
+70,Calgary,city,detached,144,"AC, dryer, hot tub, washer","budget, city, hiking, remote",3,4
+71,Rome,lake,villa,257,"WiFi, gym","downtown, luxury, nightlife, student, surfing",3,6
+72,Los Angeles,mountain,loft,538,"hot tub, pool","mountain, quiet, romantic, scenic",4,10
+73,Rome,mountain,cabin,72,"AC, gym, hot tub, parking, pet friendly","business, family-friendly, hiking, mountain, student",2,7
+74,Montreal,desert,villa,612,"hot tub, parking, pet friendly, washer","hiking, quiet, romantic, villa",1,4
+75,Ottawa,desert,cabin,801,"dryer, hot tub, parking, pool","hiking, nightlife, romantic, scenic, student",2,4
+76,Calgary,island,condo,917,"WiFi, gym, hot tub, pool, washer","quiet, student",1,4
+77,Lisbon,island,detached,722,"AC, kitchen, parking","budget, family-friendly, student",4,9
+78,London,forest,semi-detached,736,"gym, kitchen","downtown, scenic, semi-detached, surfing",1,6
+79,Los Angeles,lake,studio,867,"dryer, pet friendly, pool, washer","downtown, skiing",2,7
+80,London,lake,semi-detached,640,"hot tub, pool","budget, downtown, semi-detached",4,10
+81,New York,forest,townhouse,953,"AC, EV charger, hot tub, pool","budget, downtown, forest, luxury",1,6
+82,Lisbon,desert,detached,991,"WiFi, hot tub, kitchen, pet friendly","budget, business, downtown",3,10
+83,Montreal,city,townhouse,525,"EV charger, pool","budget, business, hiking, quiet, scenic",1,3
+84,Calgary,island,cabin,93,"dryer, hot tub, parking","cabin, luxury, nightlife, skiing, surfing",2,7
+85,Lisbon,forest,condo,717,"AC, parking","downtown, romantic, skiing",4,9
+86,Lisbon,island,loft,557,"dryer, hot tub, kitchen, parking, pet friendly","family-friendly, loft, quiet, skiing, student",3,9
+87,Seattle,island,villa,671,"EV charger, dryer, gym, hot tub","island, luxury, quiet, romantic",1,5
+88,London,mountain,semi-detached,618,"gym, hot tub, kitchen, parking","hiking, quiet, romantic, scenic, skiing",1,2
+89,Vancouver,city,townhouse,963,"EV charger, WiFi, gym, pet friendly, pool","remote, skiing",4,8
+90,Barcelona,island,detached,425,"AC, WiFi, pet friendly","scenic, surfing",3,7
+91,Montreal,suburban,semi-detached,267,"AC, dryer, gym, kitchen","family-friendly, nightlife",2,7
+92,Paris,lake,semi-detached,961,"kitchen, pet friendly","luxury, student",4,10
+93,Lisbon,city,studio,772,"WiFi, gym, hot tub, pet friendly, pool","hiking, nightlife, quiet, romantic, surfing",3,10
+94,Ottawa,forest,townhouse,664,"gym, pet friendly, pool","forest, remote, scenic, surfing",4,5
+95,Miami,mountain,condo,67,"dryer, hot tub, parking, pool","budget, business, romantic, student",2,5
+96,London,beach,detached,869,"AC, dryer, parking","beach, family-friendly",4,5
+97,Montreal,mountain,studio,388,"EV charger, dryer, pet friendly, pool, washer","remote, skiing",4,6
+98,Paris,suburban,loft,865,"AC, gym, washer","family-friendly, loft, romantic, surfing",1,6
+99,Miami,city,studio,215,"parking, washer","business, city, family-friendly, hiking, surfing",1,2
+100,Lisbon,city,semi-detached,698,"WiFi, parking, pet friendly","scenic, student",3,10
+101,Seattle,suburban,townhouse,725,"gym, pet friendly, pool","budget, downtown, hiking, scenic, townhouse",1,4
+102,Los Angeles,suburban,studio,775,"AC, EV charger, pool","hiking, surfing",4,9
+103,London,beach,condo,306,"gym, hot tub, parking, pet friendly, washer","beach, remote, student",1,7
+104,London,lake,loft,319,"AC, parking","lake, nightlife, romantic",3,6
+105,New York,lake,condo,224,"AC, dryer, kitchen, parking, pool","business, lake",2,6
+106,Los Angeles,beach,semi-detached,488,"AC, EV charger, pool, washer","quiet, romantic, semi-detached",4,11
+107,Ottawa,suburban,cabin,561,"gym, parking, washer","family-friendly, hiking, remote, student, surfing",3,6
+108,Seattle,beach,detached,819,"dryer, gym, hot tub, pet friendly","detached, family-friendly, hiking, nightlife, skiing",2,9
+109,Calgary,mountain,condo,389,"dryer, hot tub, kitchen, parking, pet friendly","budget, quiet, remote, romantic, surfing",4,5
+110,Calgary,city,detached,92,"AC, EV charger, parking","city, hiking, luxury, surfing",3,6
+111,London,suburban,villa,210,"AC, parking, washer","luxury, quiet, skiing, surfing",2,3
+112,Ottawa,forest,studio,685,"AC, EV charger, WiFi","business, family-friendly, forest",3,9
+113,Paris,mountain,semi-detached,631,"gym, hot tub, kitchen, pet friendly","remote, student",4,8
+114,Toronto,suburban,villa,396,"gym, parking, pet friendly, pool","business, downtown, nightlife, quiet, skiing",2,7
+115,Vancouver,forest,villa,883,"dryer, pet friendly, washer","budget, family-friendly, hiking, quiet, remote",3,4
+116,Lisbon,island,loft,115,"AC, dryer, kitchen, pet friendly, pool","business, family-friendly, island, nightlife, skiing",3,8
+117,Ottawa,desert,detached,717,"EV charger, WiFi, dryer, kitchen, pet friendly","business, family-friendly, quiet, remote, scenic",4,9
+118,Los Angeles,mountain,loft,129,"EV charger, WiFi, kitchen, parking, pool","downtown, luxury, skiing, student, surfing",1,3
+119,Seattle,lake,loft,293,"WiFi, gym, parking, washer","family-friendly, luxury, romantic",4,11
+120,Paris,mountain,studio,330,"WiFi, gym, kitchen, parking","romantic, skiing",2,4
+121,New York,suburban,loft,438,"AC, EV charger, gym, kitchen, washer","downtown, hiking, skiing, suburban",2,7
+122,London,city,townhouse,130,"AC, hot tub","budget, family-friendly, nightlife, townhouse",4,11
+123,Miami,beach,studio,319,"EV charger, hot tub, kitchen, pet friendly, washer","budget, business, romantic, scenic, student",2,7
+124,Los Angeles,city,loft,880,"gym, parking, pet friendly","downtown, nightlife, scenic",1,5
+125,Seattle,city,loft,764,"dryer, parking, pet friendly, pool","family-friendly, hiking, loft, nightlife, remote",2,5
+126,New York,mountain,villa,397,"kitchen, pool","business, downtown, nightlife, scenic, surfing",3,5
+127,Los Angeles,island,detached,650,"AC, hot tub, pet friendly, pool, washer","luxury, romantic, surfing",4,8
+128,Vancouver,city,studio,965,"EV charger, dryer","quiet, scenic, studio, surfing",3,6
+129,Calgary,mountain,cabin,265,"WiFi, hot tub, pool, washer","business, family-friendly, mountain, surfing",1,2
+130,Montreal,forest,cabin,203,"AC, WiFi, parking","business, hiking, luxury, quiet, student",1,3
+131,Austin,desert,loft,253,"AC, WiFi, dryer, pool","family-friendly, luxury, nightlife",1,7
+132,Vancouver,desert,studio,84,"AC, WiFi, gym, washer","nightlife, skiing",1,8
+133,Austin,desert,semi-detached,871,"AC, gym, hot tub, pet friendly, washer","budget, business, family-friendly, student, surfing",2,4
+134,New York,island,studio,578,"AC, EV charger, kitchen, pet friendly","luxury, remote, scenic, skiing",1,4
+135,New York,lake,detached,276,"pet friendly, washer","nightlife, quiet, skiing",1,3
+136,Montreal,forest,studio,246,"EV charger, WiFi, gym, parking, washer","romantic, skiing",2,3
+137,Lisbon,city,studio,128,"AC, parking","business, downtown, quiet, studio",2,9
+138,Ottawa,mountain,villa,389,"WiFi, pool, washer","business, family-friendly, mountain, scenic",2,7
+139,Seattle,forest,cabin,936,"AC, dryer, gym, hot tub, parking","business, luxury",2,6
+140,Seattle,beach,condo,600,"WiFi, dryer, pet friendly, pool, washer","condo, downtown, luxury, skiing, surfing",3,5

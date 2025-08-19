@@ -1,0 +1,6 @@
+property_id,location,environment,property_type,nightly_price,min_guests,max_guests,features,tags,env_score,budget_score,group_score,llm_similarity_score,llm_boost,fit_score
+112,Paris,mountain,townhouse,778,2,8,"kitchen, washer","luxury, remote, skiing",0.5,0.5,0.5,0.0,0.0,0.5
+62,Paris,suburban,semi-detached,166,1,6,"gym, hot tub, parking","suburban, surfing",0.5,0.5,0.5,0.0,0.0,0.5
+63,Paris,island,villa,715,1,2,"AC, hot tub","remote, skiing, surfing",0.5,0.5,0.5,0.0,0.0,0.5
+10,Paris,suburban,townhouse,773,4,7,"AC, WiFi, gym, washer","nightlife, townhouse",0.5,0.5,0.5,0.0,0.0,0.5
+115,Paris,island,semi-detached,645,2,3,"AC, EV charger","business, family-friendly, island, luxury, semi-detached",0.5,0.5,0.5,0.0,0.0,0.5
