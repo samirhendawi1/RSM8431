@@ -1,7 +1,2 @@
-username,password_hash,salt,name,group_size,environment,budget_min,budget_max
-austin,,,austin,5,"mountain,lake",20.0,2000.0
-aa,,,aa,2,mountain,2.0,2000.0
-samir,,,samir,3,beach,100.0,400.0
-samirhendawi,6fe35374f6700a488cfd8c1120ff9c09ebf06c9d17fc046158d82bb3b2b69292,578ffc38e3a8c43d99537479bc010f40,Samir,4,beach,100.0,400.0
-samir216,40145f3dcc783af714ff40c01fcb54c07e3c00fea485fa5a08e22c3721bb3854,4c04bc32dc36e203b24eca49309f8dbf,Samir,2,beach,100.0,800.0
-samirhendawi1,93a33e8365dcda5055054878507483f9d535fc1d96ab3c948b8009e44814c416,f28e85921f419e3278ade071ca0156ab,,0,,0,0
+username,first_name,salt,password_hash
+samirhendawi,Samir,820cae127ffbb4bb1e4c7ba135dac769,f4ded6dee2816eab6c6cc80c1c19916b1b8e9c241fb8bcda53e4e8b60b488935

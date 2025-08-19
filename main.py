@@ -22,13 +22,13 @@ def main():
     user_manager = UserManager()
     pm = PropertyManager(data_path)
 
-    # Default recommender
+    # Default recommender (weights fixed; no tuning UI)
     rec = Recommender(top_k=5, weights=(0.4, 0.4, 0.2), llm_weight=0.25)
 
     # SmartSearch pre-filter
     ss = SmartSearch(pm.properties)
 
-    # LLM helper (works with env var or interactive prompt)
+    # LLM helper (uses env var or interactive prompt)
     try:
         llm = LLMHelper(csv_path=data_path, request_timeout=8)
     except Exception:
@@ -59,11 +59,11 @@ def main():
             user_manager.sign_out()
 
         elif choice == "4":
-            # NOTE: edit_profile is restricted to username + password only (see UserManager.py)
+            # Restricted to username/password/first-name only (implemented in UserManager)
             user_manager.edit_profile()
 
         elif choice == "5":
-            # Minimal profile view (username only)
+            # Minimal profile view (username + first name)
             user_manager.view_profile()
 
             # Show last recommendations for the current user, if any exist
@@ -71,20 +71,17 @@ def main():
             if not u:
                 continue
 
-            # Prefer username file; ignore blank name to avoid recommendations_.csv
+            # Prefer username-based file; avoid blank-name files like recommendations_.csv
             username_candidate = Path("output") / f"recommendations_{_safe_filename(u.username)}.csv"
-            name_candidate = None
-            if getattr(u, "name", None):
-                name_candidate = Path("output") / f"recommendations_{_safe_filename(u.name)}.csv"
+            name_candidate = Path("output") / f"recommendations_{_safe_filename(u.name)}.csv" if getattr(u, "name", None) else None
 
             pick = None
             if username_candidate.is_file():
                 pick = username_candidate
             elif name_candidate and name_candidate.is_file():
                 pick = name_candidate
-
-            if pick is None:
-                # Fallback: latest file that contains username
+            else:
+                # Fallback: latest recommendations_* that contains the username
                 try:
                     outs = sorted(Path("output").glob("recommendations_*.csv"),
                                   key=lambda x: x.stat().st_mtime, reverse=True)
@@ -123,6 +120,7 @@ def main():
                 print("Sign in first.")
                 continue
 
+            # ---- Collect per-run preferences (session-only; NOT saved) ----
             print("\n-- Recommendation Inputs (blank keeps default) --")
             loc = input("Location contains (optional): ").strip()
             env_in = input(f"Environment [{user.environment or 'none'}]: ").strip().lower() or user.environment
@@ -130,6 +128,7 @@ def main():
             bmin_in = input(f"Budget min [{user.budget_min}]: ").strip()
             bmax_in = input(f"Budget max [{user.budget_max}]: ").strip()
 
+            # Safe parsing with fallbacks (still not persisted)
             try:
                 group_size = int(gs_in) if gs_in else int(getattr(user, "group_size", 0) or 0)
             except Exception:
@@ -150,23 +149,25 @@ def main():
                 budget_min, budget_max = budget_max, budget_min
 
             freeform = input("\nDescribe preferences (optional free-text): ").strip()
-            candidates = pm.properties
 
+            # Start with full dataset; apply location pre-filter if given
+            candidates = pm.properties
             if loc:
                 try:
                     candidates = candidates[candidates["location"].str.lower().str.contains(loc.lower(), na=False)]
                 except Exception:
-                    pass
+                    pass  # fail open
 
-            llm_tags, llm_ids, blurb = [], [], None
-
+            llm_tags, llm_ids = [], []
+            # Use SmartSearch to narrow candidates when freeform provided
             if freeform:
                 try:
-                    ss = SmartSearch(candidates)
-                    candidates = ss.find_candidates(freeform, top_k=300)
+                    ss_local = SmartSearch(candidates)
+                    candidates = ss_local.find_candidates(freeform, top_k=300)
                 except Exception:
                     pass
 
+                # Optional: use LLM to get tags/ids for scoring (if API key present)
                 if llm and getattr(llm, "api_key", ""):
                     try:
                         resp = llm.search(freeform)
@@ -176,28 +177,56 @@ def main():
                     except Exception as e:
                         print("LLM search error:", e)
 
-                    try:
-                        blurb_resp = llm.generate_travel_blurb(freeform)
-                        if isinstance(blurb_resp, str) and not blurb_resp.startswith("ERROR:"):
-                            blurb = blurb_resp
-                        elif isinstance(blurb_resp, str) and blurb_resp.startswith("ERROR:"):
-                            print("LLM blurb error:", blurb_resp)
-                    except Exception as e:
-                        print("LLM blurb exception:", e)
-
+            # ---- Temporary user object with per-run inputs ----
             tmp_user = User(
                 username=getattr(user, "username", ""),
-                name=getattr(user, "name", ""),
+                name=getattr(user, "name", ""),   # first name
                 group_size=group_size,
                 environment=env_in,
                 budget_min=budget_min,
                 budget_max=budget_max,
             )
 
+            # ---- Rank ----
             top5 = rec.recommend(tmp_user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
 
+            # ---- Always generate a blurb, even if freeform is empty; include first name ----
+            blurb = None
+            traveler_name = (getattr(user, "name", "") or "").strip()  # first name from profile
+            if llm and getattr(llm, "api_key", ""):
+                try:
+                    if freeform:
+                        # Augment freeform with the traveler name
+                        blurb_prompt = f"{freeform}\n\nTraveler first name: {traveler_name or 'Guest'}."
+                    else:
+                        # Compose a concise prompt from structured answers + first name
+                        parts = []
+                        if loc:
+                            parts.append(f"in or near '{loc}'")
+                        if env_in:
+                            parts.append(f"with a '{env_in}' vibe")
+                        if group_size:
+                            parts.append(f"for {group_size} guests")
+                        if (budget_min or budget_max) and not (budget_min == 0 and budget_max == 0):
+                            parts.append(f"around ${budget_min:.0f}-${budget_max:.0f}/night")
+
+                        who = traveler_name or "Guest"
+                        blurb_prompt = (
+                                f"Write a short, upbeat travel blurb addressed to {who} about suitable vacation rentals "
+                                + (", ".join(parts) + "." if parts else ".")
+                        )
+
+                    blurb_resp = llm.generate_travel_blurb(blurb_prompt)
+                    if isinstance(blurb_resp, str) and not blurb_resp.startswith("ERROR:"):
+                        blurb = blurb_resp
+                    elif isinstance(blurb_resp, str) and blurb_resp.startswith("ERROR:"):
+                        print("LLM blurb error:", blurb_resp)
+                except Exception as e:
+                    print("LLM blurb exception:", e)
+
+            # ---- Export (CSV); use USERNAME to avoid blank-name files ----
             Path("output").mkdir(parents=True, exist_ok=True)
-            fname = f"recommendations_{_safe_filename(user.name or user.username)}.csv"
+            fname = f"recommendations_{_safe_filename(user.username)}.csv"
             out = Path("output") / fname
             try:
                 top5.to_csv(out, index=False, encoding="utf-8")

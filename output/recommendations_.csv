@@ -1,6 +1,6 @@
 property_id,location,environment,property_type,nightly_price,min_guests,max_guests,features,tags,env_score,budget_score,group_score,llm_similarity_score,llm_boost,fit_score
-65,Los Angeles,forest,detached,179,4,7,"AC, WiFi, dryer, gym, kitchen","forest, hiking, surfing",0.5,0.5,0.5,0.0,0.35,0.85
-89,Los Angeles,beach,condo,210,2,8,"EV charger, WiFi, pet friendly, washer","budget, luxury, quiet, remote, romantic",0.5,0.5,0.5,0.0,0.35,0.85
-53,Los Angeles,suburban,townhouse,705,4,11,"EV charger, WiFi, gym, pet friendly, pool","budget, nightlife",0.5,0.5,0.5,0.0,0.35,0.85
-8,Los Angeles,suburban,detached,944,2,8,"EV charger, pet friendly, pool, washer","downtown, family-friendly, quiet, remote, student",0.5,0.5,0.5,0.0,0.35,0.85
-102,Los Angeles,lake,semi-detached,963,2,5,"AC, WiFi, hot tub","nightlife, romantic, surfing",0.5,0.5,0.5,0.0,0.35,0.85
+112,Paris,mountain,townhouse,778,2,8,"kitchen, washer","luxury, remote, skiing",0.5,0.5,0.5,0.0,0.0,0.5
+12,Rome,desert,detached,658,1,4,"gym, kitchen","remote, skiing",0.5,0.5,0.5,0.0,0.0,0.5
+35,Vancouver,beach,detached,293,1,3,"AC, parking, pool","skiing, surfing",0.5,0.5,0.5,0.0,0.0,0.5
+17,London,beach,semi-detached,205,2,8,"AC, dryer, gym, parking","budget, remote, skiing, surfing",0.5,0.5,0.5,0.0,0.0,0.5
+16,Seattle,lake,studio,580,1,5,"dryer, kitchen, parking, pet friendly","budget, remote",0.5,0.5,0.5,0.0,0.0,0.5

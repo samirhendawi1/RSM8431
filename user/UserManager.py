@@ -1,106 +1,139 @@
-import os, csv, secrets, re
+# UserManager.py
+
+import csv
+import os
+import sys
+import hashlib
 from dataclasses import dataclass
-from typing import Optional
-
-USERS_CSV = "data/users.csv"
-
-
-def _hash_pw(password: str, salt: str) -> str:
-    import hashlib
-    h = hashlib.sha256()
-    h.update((salt + ":" + password).encode("utf-8"))
-    return h.hexdigest()
+from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 
-def _validate_password(pw: str, username: str) -> tuple[bool, str]:
-    """
-    Rules:
-      - >= 8 chars
-      - at least 1 lowercase, 1 uppercase, 1 digit, 1 special [^A-Za-z0-9]
-      - no spaces
-      - must not contain username (case-insensitive) if username is >= 3 chars
-    Returns (ok, message). message empty on success.
-    """
-    if not isinstance(pw, str) or not pw:
-        return False, "Password is required."
-    if len(pw) < 8:
-        return False, "Password must be at least 8 characters."
-    if " " in pw:
-        return False, "Password must not contain spaces."
-    if not re.search(r"[a-z]", pw):
-        return False, "Password must include a lowercase letter."
-    if not re.search(r"[A-Z]", pw):
-        return False, "Password must include an uppercase letter."
-    if not re.search(r"[0-9]", pw):
-        return False, "Password must include a digit."
-    if not re.search(r"[^A-Za-z0-9]", pw):
-        return False, "Password must include a special character."
-    u = (username or "").strip().lower()
-    if len(u) >= 3 and u in pw.lower():
-        return False, "Password must not contain your username."
-    return True, ""
+DATA_DIR = Path("data")
+USERS_CSV = DATA_DIR / "users.csv"
 
 
 @dataclass
 class User:
+    """Lightweight user object consumed by main/recommender."""
     username: str
-    # Profile fields remain optional/editable later (kept for recomender defaults)
-    name: str = ""
-    group_size: int = 0
-    environment: str = ""
-    budget_min: float = 0.0
-    budget_max: float = 0.0
+    name: str = ""           # first name (for blurbs)
+    group_size: int = 0      # not persisted
+    environment: str = ""    # not persisted
+    budget_min: float = 0.0  # not persisted
+    budget_max: float = 0.0  # not persisted
+
+
+def _hash_pw(password: str, salt: str) -> str:
+    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+
+def _validate_password(pw: str, username: str) -> Tuple[bool, str]:
+    """
+    Rules:
+      - >= 8 chars
+      - contains uppercase, lowercase, digit, and special char
+      - must not contain the username (case-insensitive)
+    """
+    if len(pw) < 8:
+        return False, "Password must be at least 8 characters."
+    if username and username.lower() in pw.lower():
+        return False, "Password must not contain your username."
+    has_upper = any(c.isupper() for c in pw)
+    has_lower = any(c.islower() for c in pw)
+    has_digit = any(c.isdigit() for c in pw)
+    has_special = any(not c.isalnum() for c in pw)
+    if not (has_upper and has_lower and has_digit and has_special):
+        return False, "Include upper/lowercase letters, a digit, and a special character."
+    return True, ""
 
 
 class UserManager:
     """
-    Minimal sign-up/sign-in with password requirements and CSV persistence.
-    CSV columns: username,password_hash,salt,name,group_size,environment,budget_min,budget_max
+    Persisted fields: username, first_name, salt, password_hash
+    Session-only fields (never persisted): environment, group_size, budget_min, budget_max
     """
-    def __init__(self, csv_file: str = USERS_CSV):
-        self.csv_file = csv_file
-        self.users: dict[str, dict] = {}
+    def __init__(self):
+        self.users: Dict[str, Dict[str, str]] = {}
         self.current_username: Optional[str] = None
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         self._load()
 
-    # ------------- persistence -------------
-    def _ensure_dir(self):
-        parent = os.path.dirname(self.csv_file)
-        if parent and parent not in ("", "."):
-            os.makedirs(parent, exist_ok=True)
+    # ---------- Persistence ----------
 
-    def _load(self):
+    def _load(self) -> None:
+        self.users.clear()
+        if not USERS_CSV.exists():
+            return
         try:
-            with open(self.csv_file, "r", encoding="utf-8") as f:
+            with open(USERS_CSV, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                for r in reader:
-                    if "username" in r:
-                        self.users[r["username"]] = r
-        except FileNotFoundError:
-            pass
+                for row in reader:
+                    username = (row.get("username") or "").strip().lower()
+                    if not username:
+                        continue
+                    self.users[username] = {
+                        "username": username,
+                        "first_name": (row.get("first_name") or "").strip(),
+                        "salt": (row.get("salt") or "").strip(),
+                        "password_hash": (row.get("password_hash") or "").strip(),
+                    }
         except Exception as e:
-            print(f"Warning: failed to load users from {self.csv_file}: {e}")
+            print(f"[ERROR] Failed to load users: {e}", file=sys.stderr)
 
-    def _save(self):
+    def _save(self) -> None:
+        tmp = USERS_CSV.with_suffix(".tmp")
         try:
-            self._ensure_dir()
-            cols = ["username","password_hash","salt","name","group_size","environment","budget_min","budget_max"]
-            with open(self.csv_file, "w", newline="", encoding="utf-8") as f:
-                w = csv.DictWriter(f, fieldnames=cols)
-                w.writeheader()
-                for u in self.users.values():
-                    w.writerow({k: u.get(k, "") for k in cols})
+            with open(tmp, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=["username", "first_name", "salt", "password_hash"])
+                writer.writeheader()
+                for rec in self.users.values():
+                    writer.writerow({
+                        "username": rec.get("username", ""),
+                        "first_name": rec.get("first_name", ""),
+                        "salt": rec.get("salt", ""),
+                        "password_hash": rec.get("password_hash", ""),
+                    })
+            os.replace(tmp, USERS_CSV)
         except Exception as e:
-            print(f"Error: failed to save users to {self.csv_file}: {e}")
+            print(f"[ERROR] Failed to save users: {e}", file=sys.stderr)
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
 
-    # ------------- session -------------
-    def sign_up(self):
+    # ---------- Session helpers ----------
+
+    def get_current_user(self) -> Optional[User]:
+        if not self.current_username:
+            return None
+        rec = self.users.get(self.current_username)
+        if not rec:
+            return None
+        return User(
+            username=rec.get("username", ""),
+            name=rec.get("first_name", ""),
+            # the following are intentionally neutral; not persisted
+            group_size=0,
+            environment="",
+            budget_min=0.0,
+            budget_max=0.0,
+        )
+
+    # ---------- UI actions ----------
+
+    def sign_up(self) -> None:
         print("\n-- Sign up --")
         username = input("Choose a username: ").strip().lower()
         if not username:
-            print("Username required."); return
+            print("Username cannot be empty.")
+            return
         if username in self.users:
-            print("That username already exists."); return
+            print("That username already exists.")
+            return
+
+        first_name = input("First name (optional): ").strip()
 
         pw1 = input("Create a password: ").strip()
         ok, msg = _validate_password(pw1, username)
@@ -109,109 +142,112 @@ class UserManager:
             return
         pw2 = input("Confirm password: ").strip()
         if pw1 != pw2:
-            print("Passwords did not match."); return
+            print("Passwords did not match.")
+            return
 
         try:
+            import secrets
             salt = secrets.token_hex(16)
             self.users[username] = {
                 "username": username,
-                "password_hash": _hash_pw(pw1, salt),
+                "first_name": first_name,
                 "salt": salt,
-                "name": "",
-                "group_size": "0",
-                "environment": "",
-                "budget_min": "0",
-                "budget_max": "0",
+                "password_hash": _hash_pw(pw1, salt),
             }
-            self._save()
             self.current_username = username
+            self._save()
             print(f"User '{username}' created and signed in.")
         except Exception as e:
-            print(f"Error creating user: {e}")
+            print(f"[ERROR] Sign up failed: {e}")
 
-    def sign_in(self):
+    def sign_in(self) -> None:
         print("\n-- Sign in --")
         username = input("Username: ").strip().lower()
-        pw = input("Password: ").strip()
         rec = self.users.get(username)
         if not rec:
-            print("No such user."); return
+            print("No such user.")
+            return
+        pw = input("Password: ").strip()
         try:
-            if rec.get("password_hash") and _hash_pw(pw, rec.get("salt","")) == rec["password_hash"]:
-                self.current_username = username
-                print(f"Signed in as '{username}'.")
-            else:
-                print("Invalid credentials.")
+            if _hash_pw(pw, rec.get("salt", "")) != rec.get("password_hash", ""):
+                print("Incorrect password.")
+                return
         except Exception as e:
-            print(f"Error while verifying credentials: {e}")
+            print(f"[ERROR] Authentication error: {e}")
+            return
+        self.current_username = username
+        print(f"Signed in as '{username}'.")
 
-    def sign_out(self):
+    def sign_out(self) -> None:
         if self.current_username:
             print(f"Signed out '{self.current_username}'.")
-            self.current_username = None
-        else:
-            print("No user is currently signed in.")
+        self.current_username = None
 
-    # ------------- profile -------------
-    def get_current_user(self) -> Optional[User]:
-        if not self.current_username: return None
-        r = self.users.get(self.current_username)
-        if not r: return None
-        try:
-            return User(
-                username=r["username"],
-                name=r.get("name",""),
-                group_size=int(float(r.get("group_size",0) or 0)),
-                environment=r.get("environment",""),
-                budget_min=float(r.get("budget_min",0) or 0),
-                budget_max=float(r.get("budget_max",0) or 0),
-            )
-        except Exception:
-            # Return a minimal user if parsing fails
-            return User(username=r.get("username",""))
-
-    def edit_profile(self):
+    def view_profile(self) -> None:
         u = self.get_current_user()
         if not u:
-            print("Sign in first."); return
+            print("Sign in first.")
+            return
+        print("\n--- Profile ---")
+        print(f"Username: {u.username}")
+        if u.name:
+            print(f"First name: {u.name}")
+        print("----------------")
 
-        print("\n-- Edit profile (username & password only) --")
+    def edit_profile(self) -> None:
+        """
+        Restrict edits to:
+          - First name (optional)
+          - Username (optional)
+          - Password (optional; requires current password)
+        """
+        u = self.get_current_user()
+        if not u:
+            print("Sign in first.")
+            return
 
-        # -------- Username change (optional) --------
+        print("\n-- Edit profile (first name, username, password) --")
+        rec = self.users.get(self.current_username)
+        if not rec:
+            print("Internal error: current user record not found.")
+            return
+
+        # First name
+        new_first = input(f"First name (blank to keep '{rec.get('first_name','')}'): ").strip()
+        if new_first != "":
+            rec["first_name"] = new_first
+
+        # Username
         new_username = input(f"New username (blank to keep '{u.username}'): ").strip().lower()
         if new_username and new_username != u.username:
             if new_username in self.users:
                 print("That username already exists.")
                 return
             try:
-                rec = self.users.pop(u.username)
+                # move record under new key
+                self.users.pop(u.username, None)
                 rec["username"] = new_username
                 self.users[new_username] = rec
                 self.current_username = new_username
                 print(f"Username changed to '{new_username}'.")
             except Exception as e:
-                print(f"Error changing username: {e}")
+                print(f"[ERROR] Error changing username: {e}")
                 return
 
-        # -------- Password change (optional) --------
+        # Password
         change_pw = input("Change password? (y/N): ").strip().lower() == "y"
         if change_pw:
-            rec = self.users.get(self.current_username)
-            if not rec:
-                print("Internal error: current user record not found.")
-                return
-
             current_pw = input("Current password: ").strip()
             try:
-                if not (rec.get("password_hash") and _hash_pw(current_pw, rec.get("salt","")) == rec["password_hash"]):
+                if _hash_pw(current_pw, rec.get("salt", "")) != rec.get("password_hash", ""):
                     print("Current password is incorrect.")
                     return
             except Exception as e:
-                print(f"Error verifying current password: {e}")
+                print(f"[ERROR] Error verifying current password: {e}")
                 return
 
             new_pw1 = input("New password: ").strip()
-            ok, msg = _validate_password(new_pw1, self.current_username)
+            ok, msg = _validate_password(new_pw1, self.current_username or rec.get("username", ""))
             if not ok:
                 print(f"Invalid password: {msg}")
                 return
@@ -225,42 +261,27 @@ class UserManager:
                 salt = secrets.token_hex(16)
                 rec["salt"] = salt
                 rec["password_hash"] = _hash_pw(new_pw1, salt)
-                self._save()
                 print("Password updated.")
             except Exception as e:
-                print(f"Error updating password: {e}")
+                print(f"[ERROR] Error updating password: {e}")
                 return
 
-        # Persist any username change even if password not changed
-        try:
-            self._save()
-        except Exception as e:
-            print(f"Error saving changes: {e}")
+        # Persist any edits
+        self._save()
 
-    def view_profile(self):
-        """
-        Show ONLY the username (per your requirement).
-        The caller (main.py) will handle printing last 5 recommendations.
-        """
+    def delete_user(self) -> None:
         u = self.get_current_user()
         if not u:
-            print("No user signed in."); return
-        print("\n--- Profile ---")
-        print(f"Username: {u.username}")
-        print("----------------\n")
-
-    def delete_user(self):
-        username = input("Username to delete: ").strip().lower()
-        if username not in self.users:
-            print("No such user."); return
-        confirm = input("Type DELETE to remove (or 'cancel'): ").strip()
-        if confirm != "DELETE":
-            print("Cancelled."); return
+            print("Sign in first.")
+            return
+        sure = input(f"Type your username '{u.username}' to confirm deletion: ").strip().lower()
+        if sure != u.username:
+            print("Cancelled.")
+            return
         try:
-            del self.users[username]
-            if self.current_username == username:
-                self.current_username = None
+            self.users.pop(u.username, None)
+            self.current_username = None
             self._save()
-            print(f"Deleted '{username}'.")
+            print("User deleted.")
         except Exception as e:
-            print(f"Error deleting user: {e}")
+            print(f"[ERROR] Failed to delete user: {e}")
