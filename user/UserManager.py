@@ -172,34 +172,70 @@ class UserManager:
 
     def edit_profile(self):
         u = self.get_current_user()
-        if not u: print("Sign in first."); return
-        print("\n-- Edit profile -- (blank keeps current)")
-        name = input(f"Name [{u.name}]: ").strip() or u.name
-        gs  = input(f"Default group size [{u.group_size}]: ").strip()
-        env = input(f"Default environment [{u.environment}]: ").strip().lower() or u.environment
-        bmin = input(f"Default budget min [{u.budget_min}]: ").strip()
-        bmax = input(f"Default budget max [{u.budget_max}]: ").strip()
+        if not u:
+            print("Sign in first."); return
 
-        try: group_size = int(gs) if gs else u.group_size
-        except: group_size = u.group_size
-        try: budget_min = float(bmin) if bmin else u.budget_min
-        except: budget_min = u.budget_min
-        try: budget_max = float(bmax) if bmax else u.budget_max
-        except: budget_max = u.budget_max
-        if budget_min > budget_max:
-            print("Budget min cannot exceed budget max."); return
+        print("\n-- Edit profile (username & password only) --")
 
+        # -------- Username change (optional) --------
+        new_username = input(f"New username (blank to keep '{u.username}'): ").strip().lower()
+        if new_username and new_username != u.username:
+            if new_username in self.users:
+                print("That username already exists.")
+                return
+            try:
+                rec = self.users.pop(u.username)
+                rec["username"] = new_username
+                self.users[new_username] = rec
+                self.current_username = new_username
+                print(f"Username changed to '{new_username}'.")
+            except Exception as e:
+                print(f"Error changing username: {e}")
+                return
+
+        # -------- Password change (optional) --------
+        change_pw = input("Change password? (y/N): ").strip().lower() == "y"
+        if change_pw:
+            rec = self.users.get(self.current_username)
+            if not rec:
+                print("Internal error: current user record not found.")
+                return
+
+            current_pw = input("Current password: ").strip()
+            try:
+                if not (rec.get("password_hash") and _hash_pw(current_pw, rec.get("salt","")) == rec["password_hash"]):
+                    print("Current password is incorrect.")
+                    return
+            except Exception as e:
+                print(f"Error verifying current password: {e}")
+                return
+
+            new_pw1 = input("New password: ").strip()
+            ok, msg = _validate_password(new_pw1, self.current_username)
+            if not ok:
+                print(f"Invalid password: {msg}")
+                return
+            new_pw2 = input("Confirm new password: ").strip()
+            if new_pw1 != new_pw2:
+                print("Passwords did not match.")
+                return
+
+            try:
+                import secrets
+                salt = secrets.token_hex(16)
+                rec["salt"] = salt
+                rec["password_hash"] = _hash_pw(new_pw1, salt)
+                self._save()
+                print("Password updated.")
+            except Exception as e:
+                print(f"Error updating password: {e}")
+                return
+
+        # Persist any username change even if password not changed
         try:
-            rec = self.users[u.username]
-            rec["name"] = name
-            rec["group_size"] = str(group_size)
-            rec["environment"] = env
-            rec["budget_min"] = str(budget_min)
-            rec["budget_max"] = str(budget_max)
             self._save()
-            print("Profile updated.")
         except Exception as e:
-            print(f"Error updating profile: {e}")
+            print(f"Error saving changes: {e}")
 
     def view_profile(self):
         """

@@ -59,49 +59,60 @@ def main():
             user_manager.sign_out()
 
         elif choice == "4":
+            # NOTE: edit_profile is restricted to username + password only (see UserManager.py)
             user_manager.edit_profile()
 
         elif choice == "5":
+            # Minimal profile view (username only)
             user_manager.view_profile()
+
+            # Show last recommendations for the current user, if any exist
             u = user_manager.get_current_user()
             if not u:
                 continue
 
-            candidates = [
-                Path("output") / f"recommendations_{_safe_filename(u.name)}.csv",
-                Path("output") / f"recommendations_{_safe_filename(u.username)}.csv",
-                ]
-            latest = None
-            for p in candidates:
-                if p.is_file():
-                    latest = p
-                    break
+            # Prefer username file; ignore blank name to avoid recommendations_.csv
+            username_candidate = Path("output") / f"recommendations_{_safe_filename(u.username)}.csv"
+            name_candidate = None
+            if getattr(u, "name", None):
+                name_candidate = Path("output") / f"recommendations_{_safe_filename(u.name)}.csv"
 
-            if latest is None:
+            pick = None
+            if username_candidate.is_file():
+                pick = username_candidate
+            elif name_candidate and name_candidate.is_file():
+                pick = name_candidate
+
+            if pick is None:
+                # Fallback: latest file that contains username
                 try:
                     outs = sorted(Path("output").glob("recommendations_*.csv"),
                                   key=lambda x: x.stat().st_mtime, reverse=True)
                     for p in outs:
-                        if u.username in p.name or _safe_filename(u.name) in p.name:
-                            latest = p
+                        if _safe_filename(u.username) in p.name:
+                            pick = p
                             break
                 except Exception:
-                    latest = None
+                    pick = None
 
-            if latest is None:
+            if pick is None:
                 print("No past recommendations found.")
             else:
                 try:
                     import pandas as pd
-                    df = pd.read_csv(latest)
-                    print(f"Latest recommendations file: {latest}")
-                    preferred = [c for c in [
+                    df = pd.read_csv(pick)
+                    print(f"Latest recommendations file: {pick}")
+                    # Show ONLY user-friendly columns — NO scores
+                    show_cols = [c for c in [
                         "property_id", "location", "environment", "property_type", "nightly_price",
-                        "min_guests", "max_guests", "features", "tags", "fit_score"
+                        "min_guests", "max_guests", "features", "tags"
                     ] if c in df.columns]
-                    print(df[preferred].head(5).to_string(index=False))
+                    if not show_cols:
+                        print("(No displayable columns found.)")
+                    else:
+                        print(df[show_cols].head(5).to_string(index=False))
                 except Exception as e:
-                    print(f"Could not read {latest}: {e}")
+                    print(f"Could not read {pick}: {e}")
 
         elif choice == "6":
             pm.display_properties()
@@ -198,10 +209,15 @@ def main():
                 print(blurb)
 
             print(f"\nTop 5 saved to: {out}")
+            # Display WITHOUT any score columns
+            show_cols = [c for c in [
+                "property_id", "location", "environment", "property_type", "nightly_price",
+                "min_guests", "max_guests", "features", "tags"
+            ] if c in top5.columns]
             try:
-                print(top5.to_string(index=False))
+                print(top5[show_cols].to_string(index=False))
             except Exception:
-                print(top5.head(5))
+                print(top5[show_cols].head(5))
 
         elif choice == "8":
             d = pm.properties
