@@ -1,6 +1,3 @@
-# recommender/Recommender.py
-# LLM-aware recommender with dynamic weights based on what the user (and LLM) provided.
-
 from typing import Optional, List, Dict, Any
 import math
 import pandas as pd
