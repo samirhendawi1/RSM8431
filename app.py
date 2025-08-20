@@ -3,23 +3,25 @@ import os
 from pathlib import Path
 import pandas as pd
 import streamlit as st
-
-from user.UserManager import UserManager, User, _hash_pw, _validate_password  # uses your existing helpers
+from user.UserManager import UserManager, User, _hash_pw, _validate_password
 from recommender.Recommender import Recommender
 from recommender.llm import LLMHelper
 from smart_search import SmartSearch
 
 # ---------------------- Config ----------------------
 DATA_PATH = "data/property_final.csv"
-OUTPUT_DIR = Path("output"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR = Path("output");
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 st.set_page_config(page_title="StayFinder", page_icon="🏡", layout="wide")
 st.title("🏡 StayFinder")
 
-# ---------------------- Utilities ----------------------
+
 def _safe_filename(s: str) -> str:
     s = (s or "").strip()
-    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s
+                   ).strip("_")
+
 
 def _compose_fallback_blurb(first_name, loc, env_in, group, bmin, bmax):
     who = first_name or "Guest"
@@ -32,21 +34,15 @@ def _compose_fallback_blurb(first_name, loc, env_in, group, bmin, bmax):
     tail = (", ".join(bits) + ".") if bits else "."
     return f"Hi {who}, here are places that fit what you asked for {tail} I prioritized capacity, price fit, and your setting/type."
 
+
 @st.cache_data
 def load_properties(path, _schema_ver: int = 1):
-    """
-    Read the CSV read-only and preserve IDs exactly as-is.
-    Returns (None, df) so existing unpacking still works: pm, df_all = load_properties(...)
-    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Missing CSV at {path}. Put your file in /data and reload.")
 
-    # Read everything as strings so IDs like "P000001" don't get mangled
     df = pd.read_csv(p, dtype=str)
     df.columns = [str(c).strip() for c in df.columns]
-
-    # Normalize ID column name → 'property_id' and keep as string
     id_col = None
     for cand in ["property_id", "Property ID", "PROPERTY_ID", "id", "ID"]:
         if cand in df.columns:
@@ -81,10 +77,12 @@ def load_properties(path, _schema_ver: int = 1):
 
     return None, df
 
+
 def _init_user_manager():
     if "um" not in st.session_state:
         st.session_state.um = UserManager()
     return st.session_state.um
+
 
 def _get_api_key() -> str:
     key = (st.session_state.get("api_key") or "").strip()
@@ -100,6 +98,7 @@ def _get_api_key() -> str:
         pass
     return (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 
+
 def _llm_from_context():
     key = _get_api_key()
     if not key:
@@ -109,6 +108,7 @@ def _llm_from_context():
         return LLMHelper(csv_path=DATA_PATH, request_timeout=15)
     except Exception:
         return None
+
 
 def _latest_recs_path_for_user(u: User) -> Path | None:
     by_user = OUTPUT_DIR / f"recommendations_{_safe_filename(u.username)}.csv"
@@ -126,6 +126,7 @@ def _latest_recs_path_for_user(u: User) -> Path | None:
         pass
     return None
 
+
 def _show_recs_preview(csv_path: Path):
     try:
         df = pd.read_csv(csv_path)
@@ -137,6 +138,7 @@ def _show_recs_preview(csv_path: Path):
         st.dataframe(df[cols].head(10), use_container_width=True)
     except Exception as e:
         st.error(f"Could not read {csv_path}: {e}")
+
 
 # ---------------------- Load data & core helpers ----------------------
 pm, df_all = load_properties(DATA_PATH)
