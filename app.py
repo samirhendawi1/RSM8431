@@ -33,20 +33,20 @@ def _compose_fallback_blurb(first_name, loc, env_in, group, bmin, bmax):
     return f"Hi {who}, here are places that fit what you asked for {tail} I prioritized capacity, price fit, and your setting/type."
 
 @st.cache_data
-def load_properties(path):
+def load_properties(path, _schema_ver: int = 1):
     """
-    Read CSV read-only and preserve IDs exactly as present.
-    Returns (None, df) to keep the existing unpacking: pm, df_all = load_properties(...)
+    Read the CSV read-only and preserve IDs exactly as-is.
+    Returns (None, df) so existing unpacking still works: pm, df_all = load_properties(...)
     """
-    if not Path(path).exists():
-        # If the CSV is truly missing, fail fast (do NOT generate anything).
-        raise FileNotFoundError(f"Missing CSV at {path}. Add it and reload the app.")
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Missing CSV at {path}. Put your file in /data and reload.")
 
-    # Read as strings to avoid pandas coercing IDs to numbers/NaN
-    df = pd.read_csv(path, dtype=str)
+    # Read everything as strings so IDs like "P000001" don't get mangled
+    df = pd.read_csv(p, dtype=str)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Map common ID headers -> property_id, keep as string
+    # Normalize ID column name → 'property_id' and keep as string
     id_col = None
     for cand in ["property_id", "Property ID", "PROPERTY_ID", "id", "ID"]:
         if cand in df.columns:
@@ -55,25 +55,22 @@ def load_properties(path):
     if id_col and id_col != "property_id":
         df = df.rename(columns={id_col: "property_id"})
     elif not id_col:
-        # If the CSV truly lacks an ID column, create stable 1..N (strings; never zero)
+        # If your CSV truly lacks IDs, create stable 1..N (strings; never zero)
         df["property_id"] = (df.index + 1).astype(str)
 
-    # Clean/standardize types (do NOT touch property_id)
     df["property_id"] = df["property_id"].astype(str).str.strip()
 
-    # Make sure expected columns exist; fill missing ones in-memory only
-    for c in ["location","environment","property_type","nightly_price",
-              "features","tags","min_guests","max_guests"]:
+    # Ensure required columns exist (in-memory only; do NOT write back)
+    for c in ["location","environment","property_type","nightly_price","features","tags","min_guests","max_guests"]:
         if c not in df.columns:
             df[c] = "" if c in {"location","environment","property_type","features","tags"} else "0"
 
-    # Convert numeric columns safely (they were read as str above)
-    for c in ["nightly_price"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    # Convert numeric columns safely (do NOT touch property_id)
+    df["nightly_price"] = pd.to_numeric(df["nightly_price"], errors="coerce").fillna(0.0)
     for c in ["min_guests","max_guests"]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
 
-    # Build __fulltext__ for SmartSearch (purely in-memory)
+    # Build fulltext for SmartSearch (in-memory only)
     df["__fulltext__"] = (
             df["location"].fillna("") + " " +
             df["environment"].fillna("") + " " +
@@ -82,8 +79,7 @@ def load_properties(path):
             df["tags"].fillna("")
     ).str.lower()
 
-    return None, df  # keep your existing 'pm, df_all = ...' line working
-
+    return None, df
 
 def _init_user_manager():
     if "um" not in st.session_state:
@@ -91,12 +87,6 @@ def _init_user_manager():
     return st.session_state.um
 
 def _get_api_key() -> str:
-    """
-    Priority:
-      1) st.session_state.api_key  (from the API Key tab)
-      2) st.secrets["OPENROUTER_API_KEY"] (if a secrets file exists)
-      3) os.environ["OPENROUTER_API_KEY"]
-    """
     key = (st.session_state.get("api_key") or "").strip()
     if key:
         return key
@@ -110,21 +100,17 @@ def _get_api_key() -> str:
         pass
     return (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 
-# AFTER  (pass api_key explicitly; add minimal visibility on failures)
 def _llm_from_context():
     key = _get_api_key()
     if not key:
         return None
+    os.environ["OPENROUTER_API_KEY"] = key
     try:
-        # If your LLMHelper supports model override, add model="deepseek/deepseek-chat" (or your choice)
-        return LLMHelper(api_key=key, csv_path=DATA_PATH, request_timeout=15)
-    except Exception as e:
-        st.warning(f"LLM init failed: {e}")
+        return LLMHelper(csv_path=DATA_PATH, request_timeout=15)
+    except Exception:
         return None
 
-
 def _latest_recs_path_for_user(u: User) -> Path | None:
-    """Prefer username-based CSV; fallback to name; then latest containing username."""
     by_user = OUTPUT_DIR / f"recommendations_{_safe_filename(u.username)}.csv"
     if by_user.is_file():
         return by_user
@@ -154,20 +140,20 @@ def _show_recs_preview(csv_path: Path):
 
 # ---------------------- Load data & core helpers ----------------------
 pm, df_all = load_properties(DATA_PATH)
-rec = Recommender(top_k=5, weights=(0.4, 0.4, 0.2), llm_weight=0.25)
+rec = Recommender(top_k=5, base_weights=None)
 um: UserManager = _init_user_manager()
 
-# ---------------------- Tabs (maps to CLI menu) ----------------------
+# ---------------------- Tabs ----------------------
 tab_find, tab_browse, tab_filter, tab_api, tab_account = st.tabs([
     "🔎 Find Stays", "📚 Browse Properties", "🧭 Search & Filter", "🔐 API Key", "👤 Account"
 ])
 
-# ---------------------- API Key Tab (OpenRouter) ----------------------
+# ---------------------- API Key Tab ----------------------
 with tab_api:
     st.subheader("OpenRouter API Key")
-    st.write("Provide your key to enable AI-generated blurbs. It’s stored **in session only** (not written to disk).")
+    st.write("Provide your key to enable AI-generated blurbs & smarter ranking. Stored in session only.")
     existing = st.session_state.get("api_key", "")
-    key_input = st.text_input("API key", type="password", value=existing, placeholder="sk-or-v1_...", help="Session-only storage.")
+    key_input = st.text_input("API key", type="password", value=existing, placeholder="sk-or-v1_...")
     col1, col2, _ = st.columns([1, 1, 2])
     with col1:
         if st.button("Save key"):
@@ -191,14 +177,12 @@ with tab_api:
     if key_now:
         st.success("Connected ✅")
     else:
-        st.warning("No key set – using fallback blurbs.")
+        st.warning("No key set – using fallback blurbs only.")
 
-
-# ---------------------- Account Tab (1/2/3/4/5/9) ----------------------
+# ---------------------- Account Tab ----------------------
 with tab_account:
     st.subheader("Account")
 
-    # SIGN IN (2) & SIGN UP (1)
     if not um.current_username:
         c1, c2 = st.columns(2)
 
@@ -252,7 +236,6 @@ with tab_account:
         st.write(f"**Username:** `{u.username}`")
         st.write(f"**First name:** `{u.name or '—'}`")
 
-        # Latest recs preview (no scores)
         pick = _latest_recs_path_for_user(u)
         if pick:
             _show_recs_preview(pick)
@@ -274,9 +257,7 @@ with tab_account:
             if not recd:
                 st.error("User record not found.")
             else:
-                # First name
                 recd["first_name"] = (new_first or "").strip()
-                # Username change
                 new_un = (new_username or "").strip().lower()
                 if new_un != um.current_username:
                     if new_un in um.users:
@@ -286,32 +267,26 @@ with tab_account:
                         recd["username"] = new_un
                         um.users[new_un] = recd
                         um.current_username = new_un
-                # Password change
                 if change_pw:
                     if _hash_pw(cur_pw, recd.get("salt","")) != recd.get("password_hash",""):
-                        st.error("Current password is incorrect.")
-                        st.stop()
+                        st.error("Current password is incorrect."); st.stop()
                     ok, msg = _validate_password(new_pw1, um.current_username)
                     if not ok:
-                        st.error(f"Invalid password: {msg}")
-                        st.stop()
+                        st.error(f"Invalid password: {msg}"); st.stop()
                     if new_pw1 != new_pw2:
-                        st.error("Passwords did not match.")
-                        st.stop()
+                        st.error("Passwords did not match."); st.stop()
                     import secrets
                     salt = secrets.token_hex(16)
                     recd["salt"] = salt
                     recd["password_hash"] = _hash_pw(new_pw1, salt)
                 um._save()
-                st.success("Profile updated.")
-                st.rerun()
+                st.success("Profile updated."); st.rerun()
 
         st.write("---")
         st.markdown("### Sign out")
         if st.button("Sign out"):
             um.sign_out()
-            st.success("Signed out.")
-            st.rerun()
+            st.success("Signed out."); st.rerun()
 
         st.write("---")
         st.markdown("### Delete profile")
@@ -324,7 +299,6 @@ with tab_account:
                 elif (confirm or "").strip().lower() != u.username:
                     st.error("Confirmation did not match your username.")
                 else:
-                    # Use dedicated method if you added one; else inline deletion
                     if hasattr(um, "delete_user_by_username"):
                         ok = um.delete_user_by_username(u.username)
                     else:
@@ -334,12 +308,11 @@ with tab_account:
                         um._save()
                         ok = True
                     if ok:
-                        st.success("Your account was deleted.")
-                        st.rerun()
+                        st.success("Your account was deleted."); st.rerun()
                     else:
                         st.error("Could not delete the account (user not found).")
 
-# ---------------------- Browse Properties Tab (6) ----------------------
+# ---------------------- Browse Properties Tab ----------------------
 with tab_browse:
     st.subheader("Show properties")
     st.caption("Browse the full catalog. Use **Search & Filter** for targeted queries.")
@@ -353,7 +326,7 @@ with tab_browse:
     csv_bytes = df_all[cols].to_csv(index=False).encode("utf-8")
     st.download_button("Download all (displayed columns)", csv_bytes, file_name="all_properties.csv", mime="text/csv")
 
-# ---------------------- Search & Filter Tab (8) ----------------------
+# ---------------------- Search & Filter Tab ----------------------
 with tab_filter:
     st.subheader("Search and Filter Properties")
     d = df_all
@@ -389,7 +362,7 @@ with tab_filter:
     csv_bytes = d[cols].to_csv(index=False).encode("utf-8")
     st.download_button("Download results (CSV)", csv_bytes, file_name="filtered_properties.csv", mime="text/csv")
 
-# ---------------------- Find Stays Tab (7) ----------------------
+# ---------------------- Find Stays Tab (UPDATED: uses LLM hints) ----------------------
 with tab_find:
     st.subheader("Get recommendations (exports CSV)")
 
@@ -415,8 +388,8 @@ with tab_find:
             except Exception:
                 pass
 
-        # Smart search & optional LLM tags
-        llm_tags, llm_ids = [], []
+        # Smart search & LLM hints (UPDATED)
+        llm_hints, llm_ids = {}, []
         if freeform:
             try:
                 ss = SmartSearch(candidates)
@@ -426,10 +399,15 @@ with tab_find:
             llm = _llm_from_context()
             if llm and getattr(llm, "api_key", ""):
                 try:
-                    resp = llm.search(freeform)
-                    if isinstance(resp, dict):
-                        llm_tags = resp.get("tags", []) or []
-                        llm_ids = resp.get("property_ids", []) or []
+                    hints = llm.extract_hints(freeform)
+                    if isinstance(hints, dict) and "error" not in hints:
+                        llm_hints = {
+                            "tags": hints.get("tags", []),
+                            "features": hints.get("features", []),
+                            "locations": hints.get("locations", []),
+                            "environments": hints.get("environments", []),
+                        }
+                        llm_ids = hints.get("property_ids", []) or []
                 except Exception:
                     pass
 
@@ -443,10 +421,10 @@ with tab_find:
             budget_max=float(bmax or 0),
         )
 
-        # Rank
-        top5 = rec.recommend(tmp_user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
+        # Rank (UPDATED: pass llm_hints + llm_ids)
+        top5 = rec.recommend(tmp_user, candidates, llm_hints=llm_hints, llm_ids=llm_ids)
 
-        # Blurb (LLM or fallback), always include first name
+        # Blurb (unchanged)
         blurb = None
         llm = _llm_from_context()
         if llm and getattr(llm, "api_key", ""):
@@ -466,14 +444,8 @@ with tab_find:
                             + (", ".join(parts) + "." if parts else ".")
                     )
                 resp = llm.generate_travel_blurb(prompt)
-                if isinstance(resp, str):
-                    if resp.strip().startswith("ERROR:"):
-                        st.warning(resp)  # show the error instead of silently falling back
-                    elif resp.strip():
-                        blurb = resp.strip()
-                elif isinstance(resp, dict) and resp.get("error"):
-                    st.warning(f"LLM blurb error: {resp.get('error')}")
-
+                if isinstance(resp, str) and not resp.startswith("ERROR:"):
+                    blurb = resp
             except Exception:
                 pass
         if not blurb:
@@ -490,7 +462,7 @@ with tab_find:
         st.markdown("### 🔎 Top matches")
         st.dataframe(top5[cols], use_container_width=True)
 
-        # Export with username-based filename (avoid blank-name files)
+        # Export with username-based filename
         fname = f"recommendations_{_safe_filename(u.username)}.csv"
         csv_bytes = top5.to_csv(index=False).encode("utf-8")
         st.download_button("Download CSV", data=csv_bytes, file_name=fname, mime="text/csv")

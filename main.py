@@ -16,44 +16,35 @@ def _safe_filename(s: str) -> str:
 
 
 def _load_properties_readonly(path: str) -> pd.DataFrame:
-    """
-    Strictly read CSV, normalize in-memory only. Keep property_id EXACTLY as provided (string).
-    Never write or generate anything.
-    """
+    """Strictly read the CSV. Never writes, never generates."""
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Missing CSV at {path}. Add it to /data and retry.")
-
     df = pd.read_csv(path)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # ---- ID handling: preserve what's there, map common header names, do not coerce to 0 ----
+    # ID handling (preserve as string)
     id_col = None
     for cand in ["property_id", "Property ID", "PROPERTY_ID", "id", "ID"]:
         if cand in df.columns:
             id_col = cand
             break
-
     if id_col and id_col != "property_id":
         df = df.rename(columns={id_col: "property_id"})
     elif not id_col:
-        # If truly missing, create stable sequential string IDs 1..N (never zero)
         df["property_id"] = (df.index + 1).astype(str)
-
-    # Keep IDs as strings
     df["property_id"] = df["property_id"].astype(str).str.strip()
 
-    # ---- Ensure other expected columns exist (in-memory only) ----
-    for c in ["location", "environment", "property_type", "nightly_price",
-              "features", "tags", "min_guests", "max_guests"]:
+    # Ensure expected columns exist (in-memory only)
+    for c in ["location","environment","property_type","nightly_price","features","tags","min_guests","max_guests"]:
         if c not in df.columns:
             df[c] = "" if c in {"location","environment","property_type","features","tags"} else 0
 
-    # Types (safe; do NOT touch property_id)
+    # Types (safe)
     df["nightly_price"] = pd.to_numeric(df["nightly_price"], errors="coerce").fillna(0.0)
-    for c in ["min_guests", "max_guests"]:
+    for c in ["min_guests","max_guests"]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
 
-    # Fulltext used by SmartSearch
+    # Fulltext for SmartSearch
     df["__fulltext__"] = (
             df["location"].fillna("") + " " +
             df["environment"].fillna("") + " " +
@@ -71,12 +62,12 @@ def main():
 
     # ---------- Core managers ----------
     user_manager = UserManager()
-    rec = Recommender(top_k=5, weights=(0.4, 0.4, 0.2), llm_weight=0.25)
+    rec = Recommender(top_k=5, base_weights=None)
     ss = SmartSearch(properties)
 
-    # LLM helper (reads CSV internally; read-only)
+    # LLM helper (reads key from env or pass via api_key if you prefer)
     try:
-        llm = LLMHelper(csv_path=DATA_CSV, request_timeout=8)
+        llm = LLMHelper(csv_path=DATA_CSV, request_timeout=15)
     except Exception:
         llm = None
 
@@ -108,35 +99,31 @@ def main():
             user_manager.edit_profile()
 
         elif choice == "5":
-            # Username only; then last 5 recs (per your earlier requirement)
             user_manager.view_profile()
             u = user_manager.get_current_user()
             if not u:
                 continue
 
-            def _sf(x): return _safe_filename(x)
-
-            # Prefer username-based export; fallback to name; else last file containing username
-            username_file = Path("output") / f"recommendations_{_sf(u.username)}.csv"
-            name_file = Path("output") / f"recommendations_{_sf(getattr(u, 'name', ''))}.csv" if getattr(u, "name", None) else None
+            username_candidate = Path("output") / f"recommendations_{_safe_filename(u.username)}.csv"
+            name_candidate = Path("output") / f"recommendations_{_safe_filename(u.name)}.csv" if getattr(u, "name", None) else None
 
             pick = None
-            if username_file.is_file():
-                pick = username_file
-            elif name_file and name_file.is_file():
-                pick = name_file
+            if username_candidate.is_file():
+                pick = username_candidate
+            elif name_candidate and name_candidate.is_file():
+                pick = name_candidate
             else:
                 try:
                     outs = sorted(Path("output").glob("recommendations_*.csv"),
                                   key=lambda x: x.stat().st_mtime, reverse=True)
                     for p in outs:
-                        if _sf(u.username) in p.name or (getattr(u, "name", "") and _sf(u.name) in p.name):
+                        if _safe_filename(u.username) in p.name:
                             pick = p
                             break
                 except Exception:
                     pick = None
 
-            if not pick:
+            if pick is None:
                 print("No past recommendations found.")
             else:
                 try:
@@ -187,8 +174,8 @@ def main():
                 except Exception:
                     pass
 
-            # SmartSearch + optional LLM enrichment
-            llm_tags, llm_ids = [], []
+            # SmartSearch + LLM hints/ids
+            llm_hints, llm_ids = {}, []
             if freeform:
                 try:
                     candidates = SmartSearch(candidates).find_candidates(freeform, top_k=300)
@@ -196,12 +183,20 @@ def main():
                     pass
                 if llm and getattr(llm, "api_key", ""):
                     try:
-                        resp = llm.search(freeform)
-                        if isinstance(resp, dict):
-                            llm_tags = resp.get("tags", []) or []
-                            llm_ids  = resp.get("property_ids", []) or []
+                        hints = llm.extract_hints(freeform)
+                        if isinstance(hints, dict) and "error" not in hints:
+                            llm_hints = {
+                                "tags": hints.get("tags", []),
+                                "features": hints.get("features", []),
+                                "locations": hints.get("locations", []),
+                                "environments": hints.get("environments", []),
+                            }
+                            llm_ids = hints.get("property_ids", []) or []
+                        else:
+                            # print or ignore; recommender will work without LLM hints
+                            pass
                     except Exception as e:
-                        print("LLM search error:", e)
+                        print("LLM hints error:", e)
 
             # Build a temporary user object (do not modify persisted profile)
             tmp_user = type("UserLite",(object,),{})()
@@ -212,7 +207,8 @@ def main():
             tmp_user.budget_min = budget_min
             tmp_user.budget_max = budget_max
 
-            top5 = rec.recommend(tmp_user, candidates, llm_tags=llm_tags, llm_ids=llm_ids)
+            # Rank with LLM-aware scoring
+            top5 = rec.recommend(tmp_user, candidates, llm_hints=llm_hints, llm_ids=llm_ids)
 
             # Blurb
             blurb = None
@@ -235,8 +231,6 @@ def main():
                     resp = llm.generate_travel_blurb(blurb_prompt)
                     if isinstance(resp, str) and not resp.startswith("ERROR:"):
                         blurb = resp
-                    elif isinstance(resp, str) and resp.startswith("ERROR:"):
-                        print("LLM blurb error:", resp)
                 except Exception as e:
                     print("LLM blurb exception:", e)
 
