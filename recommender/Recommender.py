@@ -43,6 +43,7 @@ class Recommender:
         # Note: llm_id_boost is additive, not part of the normalized blend
         self.id_boost_weight = 0.20  # 0/1 flag → +0.20
 
+
     def _location_score(self, row_loc: str, wanted_locs: List[str]) -> float:
         if not wanted_locs:
             return 0.0
