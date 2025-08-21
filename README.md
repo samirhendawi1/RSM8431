@@ -1,193 +1,199 @@
-# RSM8431 — Property Recommender (CLI)
+# RSM8431 — Property Recommender
 
-A simple command-line app that loads a small properties dataset and recommends stays based on your profile (environment + budget). It also supports a lightweight smart search and optional LLM-assisted tagging.
+A lightweight property recommendation system with a **CLI** and an optional **Streamlit UI**. It loads a sample dataset, lets users create simple profiles, runs a rules-plus-signals recommender (with optional LLM hints), and exports personalized results to CSV.
 
 ---
 
-## Features
+## Key Features
 
-* **User profiles**: name, group size, preferred environment, budget range, travel dates
-* **Recommendations**: returns Top-5 with a composite `fit_score` and saves them to CSV
-* **Smart Search**: free-text search over features/tags (e.g., `quiet beach surfing hot tub`)
-* **CSV data**: ships with sample data in `data/`
-* **Optional LLM boost**: improves ranking when `OPENROUTER_API_KEY` is set
+* **User profiles**: username, optional first name, group size, preferred environment, budget range
+* **Top-K recommendations**: ranked by a composite `fit_score` (environment, budget fit, capacity, search/semantic boosts)
+* **Smart Search**: free-text filter over features/tags/locations with simple synonym handling
+* **Optional LLM boost**: structured hints (tags/features/locations/environments) via OpenRouter (if key is set)
+* **CSV outputs**: saved under `output/` per user
 
 ---
 
 ## Project Structure
 
-```
+```text
 .
-├─ main.py                      # CLI entrypoint
+├─ app.py                       # Streamlit UI (optional)
+├─ main.py                      # CLI entrypoint (recommended for quick use)
 ├─ smart_search.py              # Free-text candidate finder / tag canonicalizer
 ├─ recommender/
 │  ├─ Recommender.py            # Scoring & Top-K selection
-│  └─ llm.py                    # (Optional) LLM helper (OpenRouter)
+│  ├─ llm.py                    # Stable import shim for LLM helper
+│  └─ LLMHelper.py              # Optional: OpenRouter client for search hints
 ├─ properties/
-│  └─ PropertyManager.py        # CSV loader + (utility) CSV generator
+│  └─ PropertyManager.py        # CSV loader + utilities
 ├─ user/
-│  └─ UserManager.py            # User and UserManager classes
+│  └─ UserManager.py            # Demo user store (salted password hashes)
 ├─ data/
-│  ├─ properties_expanded.csv   # Default dataset (preferred)
-│  └─ properties.csv            # Fallback dataset
-└─ output/
-   └─ recommendations_*.csv     # Generated results
+│  ├─ property_final.csv        # Property dataset (read-only source)
+│  └─ users.csv                 # Demo users (do not use for real credentials)
+├─ output/
+│  └─ recommendations_*.csv     # Generated examples + your runs
+├─ secrets.toml                 # (Optional) Streamlit secrets
+└─ APIKEY                       # (Legacy/unused) — safe to remove
 ```
+
+> Note: Your archive may include `__MACOSX/`, `__pycache__/`, `.idea/`, `.DS_Store`, and some pre-generated `output/*.csv`. They’re not required for running.
 
 ---
 
 ## Requirements
 
-* Python **3.9+**
-* Python packages: `pandas`
+* **Python** 3.9+
+* **CLI**: `pandas`
+* **Streamlit UI (optional)**: `streamlit`
+* **LLM hints (optional)**: `requests` and an `OPENROUTER_API_KEY`
 
-Install deps:
+Install the minimal set you need, e.g.:
 
 ```bash
+# CLI only
 pip install pandas
-```
 
-> Tip: Use a venv.
->
-> ```bash
-> python3 -m venv .venv
-> source .venv/bin/activate          # Windows: .venv\Scripts\activate
-> pip install pandas
-> ```
+# CLI + Streamlit UI
+pip install pandas streamlit
 
----
-
-## Quickstart
-
-From the project root (where `main.py` lives):
-
-```bash
-python main.py
-```
-
-You’ll see a menu like:
-
-```
-Menu:
-1. Create user
-2. Edit profile
-3. View profile
-4. Show properties
-5. Get recommendations
-6. Smart search
-7. Delete profile
-8. Exit
-```
-
-### Minimal flow (example)
-
-1 → Create user (enter: ID, Name, Group size, Environment like `beach`/`mountain`/`city`/`lake`, Budget min/max, Travel dates)
-4 → Show properties (preview the dataset)
-5 → Get recommendations (optionally type a free-form query; press Enter to skip)
-8 → Exit
-
-Results are saved to:
-
-```
-output/recommendations_<YourName>.csv
+# Add LLM hints support
+pip install requests
 ```
 
 ---
 
 ## Data Schema
 
-`data/properties_expanded.csv` (or `properties.csv`) columns:
+**Source:** `data/property_final.csv`
 
-* `location` – city/region string
-* `type` – property/environment type (e.g., beach, mountain, city, lake)
-* `nightly_price` – integer price per night
-* `features` – comma-separated list (e.g., `WiFi, hot tub`)
-* `tags` – comma-separated list (e.g., `family-friendly, remote`)
+| column          | type | example / notes                                                  |
+| --------------- | ---- | ---------------------------------------------------------------- |
+| `property_id`   | str  | `P000123`                                                        |
+| `location`      | str  | `Phuket, Thailand`                                               |
+| `environment`   | str  | e.g., `beach`, `mountain`, `city`, `lake`, `island`, `forest`, … |
+| `property_type` | str  | e.g., `apartment`, `villa`, `guesthouse`, `cabin`, …             |
+| `nightly_price` | int  | price per night                                                  |
+| `features`      | str  | comma-separated (e.g., `WiFi, hot tub, kitchen`)                 |
+| `tags`          | str  | comma-separated (e.g., `family-friendly, long stay, beachfront`) |
+| `min_guests`    | int  | minimum capacity                                                 |
+| `max_guests`    | int  | maximum capacity                                                 |
 
-**Recommendation Output** adds:
+**Outputs** (under `output/`) add at least:
 
-* `fit_score` – composite score combining environment match, budget fit, and search/semantic boosts (higher is better)
-
----
-
-## How scoring works (high level)
-
-* **Environment match**: preferred types (e.g., `beach`) are prioritized
-* **Budget fit**: properties within `[budget_min, budget_max]` get higher weight
-* **Search boosts**: matches from Smart Search and (optionally) LLM tags can nudge items up
-
-Exact weights are in `recommender/Recommender.py`.
+* `fit_score` – composite score; higher is better
 
 ---
 
-## Smart Search
+## Quick Start
 
-Menu → **6. Smart search**
-Enter free text (keywords, features, tags). Example:
-
-```
-quiet beach surfing hot tub
-```
-
-Returns the most relevant candidates (top 10).
-
----
-
-## LLM-assisted ranking
-
-If you want to enhance results with LLM-derived tags/IDs:
-
-1. Get an OpenRouter API key
-2. Export it before running:
+### Run the CLI
 
 ```bash
-export OPENROUTER_API_KEY="sk-..."
-# Windows (PowerShell): $env:OPENROUTER_API_KEY="sk-..."
+python main.py
 ```
 
-The recommender will use it (when free-form text is provided) to slightly boost candidates that align with LLM-suggested tags/IDs.
+You’ll get a simple menu to sign up/sign in, set profile details, show properties, get recommendations (exports CSV), or search/filter.
+
+**Where results go**
+`output/recommendations_<username>.csv`
+
+### Run the Streamlit UI (optional)
+
+```bash
+streamlit run app.py
+```
+
+* Set your profile in the sidebar
+* Use the search box for free-form filters (e.g., `quiet beach hot tub`)
+* Download recommendations from the page
 
 ---
 
-## Generate a fresh dataset (optional)
+## Smart Search (free-text)
 
-`properties/PropertyManager.py` includes a helper to generate a CSV.
+* Enter space-separated cues: `beach quiet wifi hot tub phuket`
+* Built-in synonyms include a few helpful normalizations (e.g., `hottub` → `hot tub`, `wi-fi` → `wifi`, `downtown` → `city`).
+* Search runs over a composed field from `location`, `environment`, `property_type`, `features`, and `tags`.
 
-Example script:
+---
 
-```python
-from properties.PropertyManager import generate_properties_csv
-generate_properties_csv(filename="data/properties.csv", count=100)
+## Optional: LLM Hints (OpenRouter)
+
+If `OPENROUTER_API_KEY` is present, the app calls a small helper that extracts structured hints (`tags`, `features`, `locations`, `environments`, `property_ids`) from your free text to slightly boost relevant items.
+
+**Set the key (choose one):**
+
+```bash
+# Environment variable (works for CLI and Streamlit)
+export OPENROUTER_API_KEY="sk-..."
+
+# OR Streamlit secrets (add to .streamlit/secrets.toml or project secrets.toml)
+[general]
+OPENROUTER_API_KEY = "sk-..."
+```
+
+> If the key is missing or requests fail, the recommender still works—just without LLM boosts.
+
+---
+
+## How Scoring Works (high level)
+
+* **Environment match**: favor properties whose `environment` matches your preference
+* **Budget fit**: closeness to your `[budget_min, budget_max]` range
+* **Group capacity**: compatibility with `min_guests` / `max_guests`
+* **Search/semantic boosts**: matches from Smart Search and (optionally) LLM hints
+* Final `fit_score` is a blend of these components (see `recommender/Recommender.py`)
+
+---
+
+## Security & Data Notes
+
+* `data/users.csv` stores **salted password hashes** for demo purposes only. Do **not** use real credentials.
+* Treat `data/property_final.csv` as **read-only**. If you need to modify data, write to a copy.
+
+---
+
+## Housekeeping (.gitignore suggestion)
+
+```gitignore
+# OS/IDE
+.DS_Store
+__MACOSX/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# App outputs
+output/*.csv
+
+# Local configs (if any)
+secrets.toml
+.streamlit/
 ```
 
 ---
 
 ## Troubleshooting
 
-* **`ModuleNotFoundError` or imports failing:** run `python main.py` **from the project root** so relative imports and `data/` are resolved correctly.
-* **No output CSV:** ensure you ran **5. Get recommendations**, budgets are valid (min ≤ max, both > 0), and the `output/` folder is writable.
-* **No properties shown:** verify `data/properties_expanded.csv` or `data/properties.csv` exists and has the expected columns.
+* **Module not found (`pandas`/`streamlit`/`requests`)**
+  → Install the listed dependencies for your chosen mode.
+* **No CSV output appears**
+  → Ensure `output/` exists (the app tries to create it) and you completed the menu flow.
+* **LLM hints not applied**
+  → Verify `OPENROUTER_API_KEY` is set. The app falls back gracefully if not.
+* **Dataset path errors**
+  → `main.py`/`app.py` expect `data/property_final.csv` relative to the project root.
 
 ---
 
-## Short Test Plan
+## License
 
-1. Launch: `python main.py`
-2. Create user:
-
-   * Environment: `beach`
-   * Budget: `120` to `250`
-3. Show properties (menu 4) – should print a table.
-4. Get recommendations (menu 5) – confirm it prints a path like:
-
-   ```
-   Top 5 recommendations saved to: output/recommendations_<YourName>.csv
-   ```
-5. Open the CSV and verify columns include `location`, `type`, `nightly_price`, `features`, `fit_score`.
+Academic/demo use
 
 ---
 
-## Notes
-
-* The CLI prefers `data/properties_expanded.csv`; if missing, it falls back to `data/properties.csv`.
-* You can freely edit/extend the scoring logic or add new filters (e.g., max nightly price, tag filters) in the recommender and CLI.
+If you’d like, I can save this over your standalone `README.md` exactly as shown.
