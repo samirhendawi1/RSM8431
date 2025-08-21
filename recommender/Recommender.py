@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import re
 
+# Ensure pandas is imported for DataFrame handling
 def _tok(s: Any):
     s = "" if s is None else str(s)
     s = s.lower()
@@ -56,6 +57,7 @@ class Recommender:
         # soft token overlap
         return _jaccard(set(_tok(rl)), set(_tok(" ".join(map(str, wanted_locs)))))
 
+    # Scores for each row based on user preferences and LLM
     def _env_score(self, row: pd.Series, user_env: str, llm_envs: List[str]) -> float:
         tokens = set(_tok(row.get("environment","")) + _tok(row.get("tags","")) + _tok(row.get("property_type","")))
         wants = set(_tok(user_env)) | set(_tok(" ".join(llm_envs or [])))
@@ -63,6 +65,7 @@ class Recommender:
             return 0.5
         return _jaccard(tokens, wants)
 
+    # Budget score based on price vs user budget range
     def _budget_score(self, price: float, bmin: float, bmax: float) -> float:
         try:
             price = float(price or 0)
@@ -76,6 +79,7 @@ class Recommender:
         mid = (lo + hi)/2.0
         return max(0.0, 1.0 - abs(price - mid)/rng)
 
+    # Group size score based on min/max guests
     def _group_score(self, row: pd.Series, gsize: int) -> float:
         try:
             lo = int(row.get("min_guests", 0) or 0)
@@ -89,6 +93,7 @@ class Recommender:
         dist = (lo - gsize) if gsize < lo else (gsize - hi)
         return math.exp(-0.5 * max(0, dist))
 
+    # Tag/feature score based on LLM hints vs row tokens
     def _tag_feature_score(self, row: pd.Series, llm_tags: List[str], llm_features: List[str]) -> float:
         wanted = set(_tok(" ".join((llm_tags or []) + (llm_features or []))))
         if not wanted:

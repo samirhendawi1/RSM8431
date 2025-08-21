@@ -1,6 +1,6 @@
-location,type,nightly_price,features,fit_score
-Paris,cabin,500.0,pet friendly,0.578
-Rome,cabin,495.0,WiFi,0.575
-London,house,500.0,"WiFi, hot tub, pet friendly",0.574
-London,house,485.0,"WiFi, hot tub, pet friendly",0.566
-Rome,cabin,485.0,"hot tub, pet friendly, WiFi",0.561
+property_id,location,environment,property_type,nightly_price,min_guests,max_guests,features,tags,fit_score
+P005809,"Toronto, Canada",lake,apartment,335,2,5,"air conditioning,city view,gym,near metro,sauna,tv,wifi,workspace","apartment,city center,lake,mid-range,near metro,urban",0.5136363636363637
+P000765,"Toronto, Canada",lake,hotel,295,1,3,"24h check-in,air conditioning,balcony,elevator,gym,parking,washer dryer,workspace","business,city center,lake,luxury,urban",0.5126984126984127
+P000178,"Toronto, Canada",lake,apartment,275,2,5,"air conditioning,balcony,breakfast included,dock,gym,lake view,pet friendly,sauna,security,smart lock,tv","apartment,city center,lake,mid-range,pet-friendly,urban",0.5086580086580087
+P000241,"Toronto, Canada",lake,chalet,240,2,5,"24h check-in,balcony,breakfast included,parking,pet friendly,security,workspace","business,city center,lake,luxury,urban",0.5015873015873016
+P000981,"Toronto, Canada",lake,apartment,240,1,2,"city view,dock,elevator,gym,kitchen,near metro,pet friendly,sauna,security,smart lock,wifi,workspace","apartment,city center,lake,long stay,mid-range,urban",0.49444444444444446

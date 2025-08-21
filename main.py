@@ -10,11 +10,12 @@ from smart_search import SmartSearch
 DATA_CSV = "data/property_final.csv"  # read-only source
 
 
+#Sanatize string for filenames
 def _safe_filename(s: str) -> str:
     s = s or ""
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s).strip("_")
 
-
+#Load the property dataset safely (read-only, no writes or modifications to disk)
 def _load_properties_readonly(path: str) -> pd.DataFrame:
     """Strictly read the CSV. Never writes, never generates."""
     if not os.path.isfile(path):
@@ -72,6 +73,7 @@ def main():
         llm = None
 
     while True:
+        # Print options for the user
         print("\nMenu:")
         print("1. Sign up")
         print("2. Sign in")
@@ -103,16 +105,19 @@ def main():
             u = user_manager.get_current_user()
             if not u:
                 continue
-
+            
+            # Look for recommendation CSV files (by username or name)
             username_candidate = Path("output") / f"recommendations_{_safe_filename(u.username)}.csv"
             name_candidate = Path("output") / f"recommendations_{_safe_filename(u.name)}.csv" if getattr(u, "name", None) else None
 
+            # If found, read and display the latest recommendations
             pick = None
             if username_candidate.is_file():
                 pick = username_candidate
             elif name_candidate and name_candidate.is_file():
                 pick = name_candidate
             else:
+                # If not found, pick most recent matching file
                 try:
                     outs = sorted(Path("output").glob("recommendations_*.csv"),
                                   key=lambda x: x.stat().st_mtime, reverse=True)
@@ -123,9 +128,11 @@ def main():
                 except Exception:
                     pick = None
 
+            # If no past recomendation found, print a message
             if pick is None:
                 print("No past recommendations found.")
             else:
+                # Try to read and display the recomendations
                 try:
                     df = pd.read_csv(pick)
                     print(f"Latest recommendations file: {pick}")
@@ -138,6 +145,7 @@ def main():
                     print(f"Could not read {pick}: {e}")
 
         elif choice == "6":
+            # Display the first 50 properties
             cols = ["property_id","location","environment","property_type","nightly_price",
                     "min_guests","max_guests","features","tags"]
             cols = [c for c in cols if c in properties.columns]
@@ -146,10 +154,11 @@ def main():
 
         elif choice == "7":
             user = user_manager.get_current_user()
-            if not user:
+            if not user: 
                 print("Sign in first.")
                 continue
 
+             # Gather input from user (location, environment, group size, budget, free-text)
             print("\n-- Recommendation Inputs (blank keeps default) --")
             loc = input("Location contains (optional): ").strip()
             env_in = input(f"Environment [{user.environment or 'none'}]: ").strip().lower() or user.environment
@@ -181,6 +190,8 @@ def main():
                     candidates = SmartSearch(candidates).find_candidates(freeform, top_k=300)
                 except Exception:
                     pass
+
+                # LLM extraction of hints and IDs
                 if llm and getattr(llm, "api_key", ""):
                     try:
                         hints = llm.extract_hints(freeform)
@@ -258,6 +269,7 @@ def main():
                 print(f"\nTop 5 saved to: {out}")
                 print(top5[show_cols].head(5))
 
+        # Search and Filter Properties
         elif choice == "8":
             d = properties
             print(f"\nRows in dataset: {len(d)}")
@@ -269,18 +281,22 @@ def main():
                 d = d[d["property_type"].str.lower().str.contains(typ, na=False)]
             pmin = input("Minimum price per night: ").strip()
             pmax = input("Maximum price per night: ").strip()
+            # Try to filter by price range
             try:
                 if pmin: d = d[d["nightly_price"] >= float(pmin)]
                 if pmax: d = d[d["nightly_price"] <= float(pmax)]
             except Exception:
                 pass
             gs = input("Group size (or blank): ").strip()
+            # Try to filter by group size
             try:
                 if gs:
                     g = int(gs)
                     d = d[(d["min_guests"] <= g) & (g <= d["max_guests"])]
             except Exception:
                 pass
+            
+            #display results
             cols = [c for c in [
                 "property_id","location","environment","property_type","nightly_price",
                 "min_guests","max_guests","features","tags"
@@ -289,11 +305,11 @@ def main():
 
         elif choice == "9":
             user_manager.delete_user()
-
+        # Exit the program
         elif choice == "0":
             print("Bye.")
             break
-
+    
         else:
             print("Invalid choice.")
 
