@@ -31,7 +31,7 @@ A lightweight property recommendation system with a **CLI** and an optional **St
 │  └─ UserManager.py            # Demo user store (salted password hashes)
 ├─ data/
 │  ├─ property_final.csv        # Property dataset (read-only source)
-│  └─ users.csv                 # Demo users (do not use for real credentials)
+│  └─ users.csv                 # User credentials (passwords are salted hashed)
 ├─ output/
 │  └─ recommendations_*.csv     # Generated examples + your runs
 ├─ secrets.toml                 # (Optional) Streamlit secrets
