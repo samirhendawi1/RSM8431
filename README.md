@@ -263,22 +263,22 @@ request. - Displayed in both the CLI (`main.py`) and the Web App
 ![Alt text](Screenshots/homepage.png)
 
 #### Account Homepage
-![Alt text](Screenshots/account home.png)
+![Alt text](Screenshots/account_home.png)
 
 #### Browse Properties Tab
-![Alt text](Screenshots/Browse Properties.png)
+![Alt text](Screenshots/Browse_Properties.png)
 
 #### Get Recommendations
 ![Alt text](Screenshots/Getrecc.png)
 
 #### Search and Filter
-![Alt text](Screenshots/Search and filter.png)
+![Alt text](Screenshots/Search_and_filter.png)
 
 #### Edit + Delete Profile
 ![Alt text](Screenshots/editprofile.png)
 
 #### API Integration
-![Alt text](Screenshots/API Key Integration.png)
+![Alt text](Screenshots/API_Key_Integration.png)
 ---
 
 
