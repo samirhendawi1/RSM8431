@@ -134,7 +134,7 @@ export OPENROUTER_API_KEY="sk-..."
 OPENROUTER_API_KEY = "sk-..."
 ```
 
-> If the key is missing or requests fail, the recommender still works—just without LLM boosts.
+> If the key is missing or requests fail, the recommender still works, just without LLM boosts.
 
 ---
 
