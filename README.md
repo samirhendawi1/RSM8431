@@ -64,6 +64,7 @@ pip install requests
 
 ---
 
+
 ## Data Schema
 
 **Source:** `data/property_final.csv`
@@ -256,6 +257,30 @@ request. - Displayed in both the CLI (`main.py`) and the Web App
 
 
 ---
+## Graphical User Interface (Streamlit)
+
+#### Homepage
+![Alt text](Screenshots/homepage.png)
+
+#### Account Homepage
+![Alt text](Screenshots/account home.png)
+
+#### Browse Properties Tab
+![Alt text](Screenshots/Browse Properties.png)
+
+#### Get Recommendations
+![Alt text](Screenshots/Getrecc.png)
+
+#### Search and Filter
+![Alt text](Screenshots/Search and filter.png)
+
+#### Edit + Delete Profile
+![Alt text](Screenshots/editprofile.png)
+
+#### API Integration
+![Alt text](Screenshots/API Key Integration.png)
+---
+
 
 ## Security & Data Notes
 
