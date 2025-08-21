@@ -193,7 +193,3 @@ secrets.toml
 ## License
 
 Academic/demo use
-
----
-
-If you’d like, I can save this over your standalone `README.md` exactly as shown.
