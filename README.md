@@ -140,7 +140,7 @@ OPENROUTER_API_KEY = "sk-..."
 
 ---
 
-## How Scoring Works (high level)
+## Recommender Logic
 
 * **Environment match**: favor properties whose `environment` matches your preference
 * **Budget fit**: closeness to your `[budget_min, budget_max]` range
