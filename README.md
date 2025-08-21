@@ -266,7 +266,7 @@ request. - Displayed in both the CLI (`main.py`) and the Web App
 ![Alt text](Screenshots/account_home.png)
 
 #### Browse Properties Tab
-![Alt text](Screenshots/Browse_Properties.png)
+![Alt text](Screenshots/Browse_properties.png)
 
 #### Get Recommendations
 ![Alt text](Screenshots/Getrecc.png)
