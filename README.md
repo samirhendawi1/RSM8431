@@ -215,21 +215,14 @@ structured hints, such as:
 *   Weight is `id_boost_weight` (default **+0.20** on the final score).
 *   This is _additive_, not part of the normalized blend.
 
-## 4. Dynamic weighting
+## 4. Weighting Logic
 
 Weights adapt to what the user actually supplies and what the LLM extracted:
 
 *   Start from base weights (defaults):
     *   `env`: 0.22, `budget`: 0.22, `group`: 0.18, `tag_feature`: 0.18, `location`: 0.10, `llm_sim`: 0.10
 
-*   Then bump weights if the signal is present:
-*   Provided **group_size** → `group += 0.06`
-*   Provided **budget** → `budget += 0.06`
-*   User **environment** → `env += 0.05`
-*   LLM **environments** → `env += 0.05`
-*   LLM **locations** → `location += 0.05`
-*   LLM **tags/features** → `tag_feature += 0.08`, `llm_sim += 0.04`
-
+*   Then weights are only ever assigned if a signal is present, absent signals get 0.0 weight.
 *   Finally **normalize** the weights so they sum to 1.0 (the ID boost remains additive).
 
 Final score
@@ -243,7 +236,6 @@ How the LLM affects ranking
 ===========================
 
 *   **Directly**: via `tag_feature_score`, `location_score`, `llm_similarity_score`, and the **ID boost** if it names IDs.
-*   **Indirectly**: by **increasing the weights** of relevant components.  
     Example: if the user says “**rooftop hot tub near Barcelona**”, LLM hints likely include `tags=["hot tub"]`, `locations=["barcelona"]`. The system bumps `tag_feature` and `location` weights and those properties rise.
 
 
