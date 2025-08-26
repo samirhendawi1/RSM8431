@@ -7,9 +7,10 @@ import re
 def _tok(s: Any):
     s = "" if s is None else str(s)
     s = s.lower()
-    s = re.sub(r"[^a-z0-9\s\-]", " ", s)
+    s = re.sub(r"[^a-z0-9\s\-]", " ", s) #replace any ^a-z0-9\s\- with space
     return [w for w in re.sub(r"\s+", " ", s).split(" ") if w]
 
+#jecard similarity between two sets(user preferences and property attributes)
 def _jaccard(a: set, b: set) -> float:
     if not a and not b:
         return 0.0
@@ -43,25 +44,25 @@ class Recommender:
 
 
     def _location_score(self, row_loc: str, wanted_locs: List[str]) -> float:
-        if not wanted_locs:
+        if not wanted_locs: # no location preference, return location score 0
             return 0.0
         rl = (row_loc or "").lower()
-        if not rl:
+        if not rl: # if there if no location in the row, return location score 0
             return 0.0
         for w in wanted_locs:
             if not w:
                 continue
             w = str(w).lower()
-            if w in rl:
+            if w in rl: # for exact token match, return location score 1
                 return 1.0
         # soft token overlap
         return _jaccard(set(_tok(rl)), set(_tok(" ".join(map(str, wanted_locs)))))
 
     # Scores for each row based on user preferences and LLM
     def _env_score(self, row: pd.Series, user_env: str, llm_envs: List[str]) -> float:
-        tokens = set(_tok(row.get("environment","")) + _tok(row.get("tags","")) + _tok(row.get("property_type","")))
-        wants = set(_tok(user_env)) | set(_tok(" ".join(llm_envs or [])))
-        if not wants:
+        tokens = set(_tok(row.get("environment","")) + _tok(row.get("tags","")) + _tok(row.get("property_type",""))) #tokens from properties list environment, tags and property type
+        wants = set(_tok(user_env)) | set(_tok(" ".join(llm_envs or []))) #tokens from user input union with LLM environments
+        if not wants: #if no environment preference, set as neutral score 0.5
             return 0.5
         return _jaccard(tokens, wants)
 
@@ -70,9 +71,9 @@ class Recommender:
         try:
             price = float(price or 0)
         except Exception:
-            price = 0.0
+            price = 0.0 #fall back to 0 if conversion fails
         if (not bmin and not bmax) or (float(bmin)==0 and float(bmax)==0):
-            return 0.5
+            return 0.5 #if there is no budget preference or the max/min budget are both 0, set as neutral score 0.5
         lo = min(float(bmin or 0), float(bmax or 0))
         hi = max(float(bmin or 0), float(bmax or 0))
         rng = max(hi - lo, 1e-9)
@@ -107,6 +108,7 @@ class Recommender:
         ])))
         return _jaccard(row_tokens, wanted)
 
+    # board similarity score based on LLM
     def _llm_similarity(self, row: pd.Series, llm_tags: List[str], llm_features: List[str], llm_envs: List[str]) -> float:
         pool = set(_tok(" ".join((llm_tags or []) + (llm_features or []) + (llm_envs or []))))
         if not pool:
@@ -120,32 +122,48 @@ class Recommender:
         ])))
         return _jaccard(row_tokens, pool)
 
+    #Increse weights for signals that are present
     def _dynamic_weights(self, user_env: str, bmin: float, bmax: float, gsize: int,
                          has_tags: bool, has_features: bool, has_locs: bool, has_envs: bool) -> Dict[str, float]:
-        w = dict(self.base_weights)
+        # Presence checks
+        budget_present = bool((bmin or bmax) and not (float(bmin) == 0 and float(bmax) == 0))
+        group_present  = bool(gsize and gsize > 0)
+        env_present    = bool((str(user_env).strip() if user_env else "") or has_envs)
+        tag_present    = bool(has_tags or has_features)
+        loc_present    = bool(has_locs)
+        sim_present    = bool(has_envs or has_tags or has_features)  # llm_sim only meaningful if any LLM hint exists
 
-        # Emphasize present constraints/signals
-        if gsize and gsize > 0:
-            w["group"] += 0.06
-        if (bmin or bmax) and not (float(bmin)==0 and float(bmax)==0):
-            w["budget"] += 0.06
-        if user_env:
-            w["env"] += 0.05
-        if has_envs:
-            w["env"] += 0.05
-        if has_locs:
-            w["location"] += 0.05
-        if has_tags or has_features:
-            w["tag_feature"] += 0.08
-            w["llm_sim"] += 0.04
+        # Collect present signals with base magnitudes
+        present = {}
+        if env_present:     present["env"]         = self.base_weights.get("env", 0.0)
+        if budget_present:  present["budget"]      = self.base_weights.get("budget", 0.0)
+        if group_present:   present["group"]       = self.base_weights.get("group", 0.0)
+        if tag_present:     present["tag_feature"] = self.base_weights.get("tag_feature", 0.0)
+        if loc_present:     present["location"]    = self.base_weights.get("location", 0.0)
+        if sim_present:     present["llm_sim"]     = self.base_weights.get("llm_sim", 0.0)
 
-        # Normalize to 1.0
-        s = sum(w.values())
-        if s <= 0:
-            return w
-        for k in w:
-            w[k] = w[k] / s
-        return w
+        # Normalize only the present ones
+        if present:
+            total = sum(present.values())
+            if total > 0:
+                present = {k: v / total for k, v in present.items()}
+            else:
+                # Degenerate case: if all base magnitudes were zero, split equally among present
+                eq = 1.0 / len(present)
+                present = {k: eq for k in present.keys()}
+        else:
+            # No signals present: (choose one)
+            # Option A (robust): equal weights across all signals
+            eq = 1.0 / 6.0
+            present = {k: eq for k in ["env","budget","group","tag_feature","location","llm_sim"]}
+            # Option B (strict): all zero weights — uncomment next line and comment Option A if you prefer hard-zero fallback
+            # present = {k: 0.0 for k in ["env","budget","group","tag_feature","location","llm_sim"]}
+
+        # Return full dict with zeros for any missing keys
+        full = {k: 0.0 for k in ["env","budget","group","tag_feature","location","llm_sim"]}
+        full.update(present)
+        return full
+
 
     def recommend(
             self,
@@ -155,6 +173,7 @@ class Recommender:
             llm_hints: Optional[Dict[str, List[str]]] = None,
             llm_ids: Optional[List[str]] = None,
     ) -> pd.DataFrame:
+        #guard against empty dataframe
         if df is None or len(df) == 0:
             return pd.DataFrame()
         d = df.copy()
@@ -165,13 +184,14 @@ class Recommender:
         bmax = float(getattr(user, "budget_max", 0) or 0)
         gsize = int(getattr(user, "group_size", 0) or 0)
 
+        # Unpack LLM hints if any, if not present use empty lists
         hints = llm_hints or {}
         tags = [t for t in (hints.get("tags") or []) if t]
         feats = [t for t in (hints.get("features") or []) if t]
         locs = [t for t in (hints.get("locations") or []) if t]
         envs = [t for t in (hints.get("environments") or []) if t]
 
-        # Scores
+        # Scores, calling the scoring function from above
         d["env_score"] = d.apply(lambda r: self._env_score(r, user_env, envs), axis=1)
         d["budget_score"] = d["nightly_price"].apply(lambda p: self._budget_score(p, bmin, bmax))
         d["group_score"] = d.apply(lambda r: self._group_score(r, gsize), axis=1)
