@@ -175,9 +175,10 @@ structured hints, such as:
   "features": ["pool", "wifi"]
 }
 ```
+All text comparisons use _tok (lower-case, strip non-alphanumerics, split to tokens). Set overlap is measured with Jaccard.
 
 ## 4. Scoring System
-
+### Score computation (each ∈ [0,1])
 
 1.  **Environment score** `env_score`  
     Jaccard overlap between tokens from the row (`environment`, `tags`, `property_type`) and desired tokens from the user’s `environment` plus LLM `environments`.
@@ -185,9 +186,9 @@ structured hints, such as:
 *   If no env given → default to 0.5.
 
 2.  **Budget score** `budget_score`  
-    Closeness of `nightly_price` to the user’s budget range:
+    Favours the midpoint:
 
-    `budget_score = max(0, 1 - |price - mid| / max(hi-lo, ε))`
+    `max(0, 1 − |price − mid| / (max−min))`
 
     If no budget is provided → 0.5.
 
@@ -212,8 +213,8 @@ structured hints, such as:
 7.  **ID boost** `llm_id_hit`  
     If the LLM returns explicit `property_ids`, any row whose `property_id` matches (string compare) gets a fixed additive bump.
 
-*   Weight is `id_boost_weight` (default **+0.20** on the final score).
-*   This is _additive_, not part of the normalized blend.
+*   Weight is `id_boost_weight`.
+*   This is additive and not part of the normalized blend.
 
 ## 4. Weighting Logic
 
