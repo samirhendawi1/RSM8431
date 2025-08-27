@@ -125,7 +125,7 @@ streamlit run app.py
 If `OPENROUTER_API_KEY` is present, the app calls a small helper that extracts structured hints (`tags`, `features`, `locations`, `environments`, `property_ids`) from your free text to slightly boost relevant items.
 
 Alternatively, users can input their API key in the API Key Tab on Streamlit.
-
+For our project, we used DeepSeek V3 API Key. 
 **Set the key (choose one):**
 
 ```bash
