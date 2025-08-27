@@ -6,7 +6,7 @@ A lightweight property recommendation system with a **CLI** and an optional **St
 
 ## Key Features
 
-* **User profiles**: username, optional first name, group size, preferred environment, budget range
+* **User profiles**: username, optional first name, password (hash-protected), and recent recommendations.
 * **Top-K recommendations**: ranked by a composite `fit_score` (environment, budget fit, capacity, search/semantic boosts)
 * **Smart Search**: free-text filter over features/tags/locations with simple synonym handling
 * **Optional LLM boost**: structured hints (tags/features/locations/environments) via OpenRouter (if key is set)
