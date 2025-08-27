@@ -7,8 +7,8 @@ A lightweight property recommendation system with a **CLI** and an optional **St
 ## Key Features
 
 * **User profiles**: username, optional first name, password (hash-protected), and recent recommendations. Edit/Create/View/Delete Profile. Sign in/out. Change Password Use cases.
-* **Find Stays**: Input location, environment, group size, budget range, and additional details query to find a place with LLM integration (SmartSearch).
-* **Search + Filter**: Filter over budget, group size, locations, and environment with simple synonym handling (LLM smart).
+* **Find Stays**: Input location, environment, group size, budget range, and additional details query to find a place with LLM integration (SmartSearch). CSV export option. 
+* **Search + Filter**: Filter over budget, group size, locations, and environment with simple synonym handling (LLM smart). CSV export option. 
 * **Browse Properties**: Browse all avaialble properties and sort.
 * **API Key**: input API key for LLM integration. Connection Test. 
 * ****: saved under `output/` per user
