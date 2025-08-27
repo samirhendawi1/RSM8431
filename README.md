@@ -264,6 +264,7 @@ request. - Displayed in both the CLI (`main.py`) and the Web App
 
 #### Get Recommendations
 ![Alt text](Screenshots/Getrecc.png)
+![Alt text](Screenshots/Santorini.png)
 
 #### Search and Filter
 ![Alt text](Screenshots/Search_and_filter.png)
